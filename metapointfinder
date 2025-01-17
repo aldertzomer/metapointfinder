@@ -82,7 +82,7 @@ cat class |while read class ; do
 	    echo $class $previousaccession $changes_str |sed 's/,$//'
 	    changes_str=``
 	fi
-	mutation_cleaned=`echo $mutation |cut -f 2 -d _` 
+	mutation_cleaned=`echo $mutation |cut -f 2 -d _|sed 's/del/-/g'|sed 's/STOP/-/g'` 
 	changes_str=`echo "$mutation_cleaned"",""$changes_str"`
 	previousaccession=`echo $accession`
     done
