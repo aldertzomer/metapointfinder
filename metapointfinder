@@ -78,15 +78,11 @@ if ! test -f AMRProt-mutation_underscore_combined.tsv; then
 echo "Prepping AMRProt mutation database"
 cat class |while read class ; do
     cat AMRProt-mutation_underscore.tsv |cut -f 2,4,6 |grep -w $class |sort -nk 1 |while read accession mutation class ; do
-	if [ "$accession" != "$previousaccession" ] ; then
-	    echo $class $previousaccession $changes_str |sed 's/,$//'
-	    changes_str=``
-	fi
 	mutation_cleaned=`echo $mutation |cut -f 2 -d _|sed 's/del/-/g'|sed 's/STOP/-/g'` 
 	changes_str=`echo "$mutation_cleaned"",""$changes_str"`
-	previousaccession=`echo $accession`
-    done
-done |tr " " "\t" > AMRProt-mutation_underscore_combined.tsv
+	echo $class $accession $changes_str |sed 's/,$//'
+    done |sed 's/,$//' |tail -n 1|tr " " "\t" >> AMRProt-mutation_underscore_combined.tsv
+done
 fi
 
 #build the diamond database
