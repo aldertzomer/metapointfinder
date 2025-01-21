@@ -117,11 +117,17 @@ rm input.tsv
 rm updated_table_with_scores_and_mutations.tsv
 
 #quick collation of results
+cat D87G_1.updated_table_with_scores_and_mutations.tsv |grep -v None|cut -f 2 |grep -v gene |sort|uniq >gene
 echo class WT R |tr " " "\t" >$sample.summary.txt
 cat class | while read class ; do
-    WT=`cat $sample.updated_table_with_scores_and_mutations.tsv |grep -v class |grep $class|cut -f 7 |grep -w 0 |wc -l`
-    R=`cat $sample.updated_table_with_scores_and_mutations.tsv |grep -v class |grep $class|cut -f 7 |grep -v -w 0 |wc -l`
+    WT=`cat $sample.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|cut -f 7 |grep -w 0 |wc -l`
+    R=`cat $sample.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|cut -f 7 |grep -v -w 0 |wc -l`
     echo $class $WT $R |tr " " "\t" >>$sample.summary.txt
+    cat gene |while read gene ; do
+	WT=`cat $sample.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|fgrep "$gene" |cut -f 7 |grep -w 0 |wc -l`
+	R=`cat $sample.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|fgrep "$gene" |cut -f 7 |grep -v -w 0 |wc -l`
+	echo "$class"."$gene" $WT $R |tr " " "\t" |grep -v "0	0">>$sample.summary.txt
+    done
 done
 
 #report
