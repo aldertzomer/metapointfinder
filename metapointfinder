@@ -69,19 +69,22 @@ fi
 #replace slashes by underscores
 cat AMRProt-mutation.tsv  |sed 's/\//_/g' > AMRProt-mutation_underscore.tsv
 
-#remove this line and replace class with a file with only the AB class you want to check
+#remove this line and replace class with a file with only the AB class or accession you want to check
 cat AMRProt-mutation_underscore.tsv |cut -f 6 |sort |uniq > class
+cat AMRProt-mutation_underscore.tsv |cut -f 2 |sort |uniq > accession
 
 #prep database
 if ! test -f AMRProt-mutation_underscore_combined.tsv; then
 # this loop combines all the mutations in one line per protein per class. only needs to be done once
 echo "Prepping AMRProt mutation database"
 cat class |while read class ; do
-    cat AMRProt-mutation_underscore.tsv |cut -f 2,4,6 |grep -w $class |sort -nk 1 |while read accession mutation class ; do
-	mutation_cleaned=`echo $mutation |cut -f 2 -d _|sed 's/del/-/g'|sed 's/STOP/-/g'` 
-	changes_str=`echo "$mutation_cleaned"",""$changes_str"`
-	echo $class $accession $changes_str |sed 's/,$//'
-    done |sed 's/,$//' |tail -n 1|tr " " "\t" >> AMRProt-mutation_underscore_combined.tsv
+    cat accession |while read accession; do 
+	cat AMRProt-mutation_underscore.tsv |cut -f 2,4,6 |grep -w "$class" |grep -w "$accession" |sort -nk 1 |while read accession mutation class ; do
+	    mutation_cleaned=`echo "$mutation" |cut -f 2 -d _|sed 's/del/-/g'|sed 's/STOP/-/g'` 
+	    changes_str=`echo "$mutation_cleaned"",""$changes_str"`
+	    echo "$class" "$accession" "$changes_str" |sed 's/,$//'
+	done |sed 's/,$//' |tail -n 1|tr " " "\t" >> AMRProt-mutation_underscore_combined.tsv
+    done
 done
 fi
 
