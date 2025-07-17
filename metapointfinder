@@ -1,16 +1,27 @@
 #!/bin/bash
-# run as ./metapointfinder file.fastq
+# run as ./metapointfinder file.fastq databasefolder outputfolder
 echo "This is metapointfinder v0.2"
 echo "This tool finds substitions in translated reads matching to relevant proteins and mutations in reads matching to relevant genes"
 echo "Relevant proteins and genes are obtained from the AMRFinder database"
 
+SCRIPT=$(readlink -f "$0")
+scriptlocation=$(dirname "$SCRIPT")
+input=$(readlink -f "$1")
+fastqfile=`basename $input`
+database=$2
+output=$3
+
+####################################
+### Check all inputs and outputs ###
+####################################
+
 #check dependencies
-cat dependencies |while read program ; do 
+cat $scriptlocation/dependencies |while read program ; do 
 #    hash "$program" 2>/dev/null || { echo "Script requires "$program" but it's not installed. Aborting."; exit 1; }
     if command -v $program > /dev/null ; then 
 	exit 0
     else 
-	echo "Required depenency $program not installed"
+	echo "Required dependency $program not installed"
 	exit 1
     fi
 done
@@ -34,39 +45,94 @@ fi
 
 #check if arguments are supplied
 if [[ $# -eq 0 ]] ; then
-    echo "No fastq file supplied"
-    echo "usage: ./metapointfinder file.fastq or ./metapointfinder file.fastq.gz"
+    echo "usage: ./metapointfinder file.fastq databasefolder outputfolder or ./metapointfinder file.fastq.gz databasefolder outputfolder"
     echo ""
     exit 1
 fi
 
-
 #check if input exists
-if ! test -f "$1"; then
-    echo "File "$1" not found!"
-    echo "usage: ./metapointfinder file.fastq or ./metapointfinder file.fastq.gz"
+if ! test -f "$input"; then
+    echo "File "$input" not found!"
+    echo "usage: ./metapointfinder file.fastq databasefolder outputfolder or ./metapointfinder file.fastq.gz databasefolder outputfolder"
     echo ""
+    exit 1
+fi
+
+#check if database is supplied
+if [ -z "$database" ]
+  then
+    echo "Error: AMR database not supplied - exiting" 1>&2
+    exit 1
+fi
+
+#check if output is supplied
+if [ -z "$output" ]
+  then
+    echo "Error: outputfolder not supplied - exiting" 1>&2
+    exit 1
+fi
+
+#check if database is existing
+if [ -d "$database" ]
+  then
+    echo "Database folder already exists" 1>&2
+    database=$(readlink -f "$database")
+  else
+    mkdir $database
+    database=$(readlink -f "$database")
+fi
+
+#check if database is created
+if ! [ -d "$database" ]
+  then
+    echo "Error: database folder not existing or not created. Try again - exiting" 1>&2
+    exit 1
+fi
+
+#check if output is existing
+if [ -d "$output" ]
+  then
+    echo "Output folder already exists. Adding results to folder and potentially overwriting older results. Do not run metapointfinder in parallel on the same outputfolder." 1>&2
+    output=$(readlink -f "$output")
+  else
+    mkdir $output
+    output=$(readlink -f "$output")
+fi
+
+#check if output is created
+if ! [ -d "$output" ]
+  then
+    echo "Error: database folder not existing or not created. Try again - exiting" 1>&2
     exit 1
 fi
 
 #unzip file if necessary and assign sample variable
-if [[ $1 =~ \.gz$ ]]; then
-    sample=`echo "$1" |sed 's/.fastq.gz//'`
-    zcat $1 > $sample.fastq
+if [[ $fastqfile =~ \.gz$ ]]; then
+    sample=`echo "$fastqfile" |sed 's/.fastq.gz//'`
+    zcat "$input" > "$output"/"$sample".fastq
 else
-    sample=`echo "$1" |sed 's/.fastq//'`
+    sample=`echo "$fastqfile" |sed 's/.fastq//'`
+    cp "$input" "$output"/"$sample".fastq
 fi
 
+
+#########################
+### Database prepping ###
+#########################
+
+
+#First we move into the database folder and prep the database
+cd $database
 
 #get the databases
 if ! test -f AMRProt.fa; then
     echo "downloading https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt.fa"
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt.fa
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt.fa 1>> databaseprep.log 2>> databaseprep.error
 fi
 
 if ! test -f AMRProt-mutation.tsv; then
     echo "downloading https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt-mutation.tsv"
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt-mutation.tsv
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt-mutation.tsv 1>> databaseprep.log 2>> databaseprep.error
 fi
 
 #replace slashes by underscores
@@ -95,93 +161,41 @@ fi
 
 if ! test -f AMRProt.dmnd; then 
     echo "Building AMRProt diamond database"
-    diamond makedb --in AMRProt.fa --db AMRProt 1>diamondmakedb.log 2>diamondmakedb.error
-fi
-
-#align the reads
-echo "Aligning reads to proteins using diamond blastx"
-diamond blastx -d AMRProt -q $sample.fastq -o $sample.prot.hits.txt -F 15 --range-culling -k1 --range-cover 5 --iterate --id 80 --subject-cover 90 --masking 0 --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore full_sseq qseq_translated 1> $sample.diamond.log 2> $sample.diamond.error
-
-# make the input for R
-echo "Parsing diamond output"
-echo "class	gene	read	reference	target	changes_str" >$sample.prot.input.tsv
-cat $sample.prot.hits.txt  |cut -f 1,2,13,14 |sed "s/|/\t/g" |cut -f 1,3,12,13,14 |while read id accession gene reference target ; do
-    cat AMRProt-mutation_underscore_combined.tsv |grep $accession |while read class accession changes ; do
-	echo $class $gene $id $reference $target $changes
-    done
-done | tr " " "\t" >>$sample.prot.input.tsv
-
-#run the R script. Too lazy to do argument parsing with R
-echo "Scoring amino acid substitutions"
-cp $sample.prot.input.tsv input.tsv
-R --vanilla < prot_score_mutations.R 1> prot.R.log 2>prot.R.error
-cp updated_table_with_scores_and_mutations.tsv $sample.prot.updated_table_with_scores_and_mutations.tsv
-rm input.tsv
-rm updated_table_with_scores_and_mutations.tsv
-
-#quick collation of results
-cat $sample.prot.updated_table_with_scores_and_mutations.tsv |grep -v None|cut -f 2 |grep -v gene |sort|uniq >gene
-echo class WT R |tr " " "\t" >$sample.prot.summary.txt
-cat class | while read class ; do
-    WT=`cat $sample.prot.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|cut -f 7 |grep -w 0 |wc -l`
-    R=`cat $sample.prot.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|cut -f 7 |grep -v -w 0 |wc -l`
-    echo $class $WT $R |tr " " "\t" >>$sample.prot.summary.txt
-    cat gene |while read gene ; do
-	WT=`cat $sample.prot.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|fgrep "$gene" |cut -f 7 |grep -w 0 |wc -l`
-	R=`cat $sample.prot.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|fgrep "$gene" |cut -f 7 |grep -v -w 0 |wc -l`
-	echo "$class"."$gene" $WT $R |tr " " "\t" |grep -v "0	0">>$sample.prot.summary.txt
-    done
-done
-
-#report
-echo
-if test -f "$sample.prot.updated_table_with_scores_and_mutations.tsv"; then
-    echo "Read classification output (WT/R) can be found in the file $sample.prot.updated_table_with_scores_and_mutations.tsv"
-else
-    echo "Read classification output not generated. Something went wrong"
-    exit 1
-fi
-
-if test -f "$sample.prot.summary.txt"; then
-    echo "Summary of classification output (WT/R) can be found in the file $sample.prot.summary.txt"
-    echo
-else
-    echo "Summary output not generated. Something went wrong"
-    exit 1
+    diamond makedb --in AMRProt.fa --db AMRProt 1>> databaseprep.log 2>> databaseprep.error
 fi
 
 #get the DNA databases
 if ! test -f AMR_DNA.fa; then
     echo downloading DNA fasta databases
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Acinetobacter_baumannii.fa
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Campylobacter.fa
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Clostridioides_difficile.fa
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecalis.fa
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecium.fa
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Escherichia.fa
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_oxytoca.fa
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_pneumoniae.fa
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Neisseria_gonorrhoeae.fa
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Salmonella.fa
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Staphylococcus_aureus.fa
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Streptococcus_pneumoniae.fa
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Acinetobacter_baumannii.fa 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Campylobacter.fa 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Clostridioides_difficile.fa 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecalis.fa 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecium.fa 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Escherichia.fa 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_oxytoca.fa 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_pneumoniae.fa 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Neisseria_gonorrhoeae.fa 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Salmonella.fa 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Staphylococcus_aureus.fa 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Streptococcus_pneumoniae.fa 1>> databaseprep.log 2>> databaseprep.error
     cat AMR_DNA-*.fa > AMR_DNA.fa
 fi
 
 if ! test -f AMR_DNA-mutation.tsv; then
     echo "downloading https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt-mutation.tsv"
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Acinetobacter_baumannii.tsv
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Campylobacter.tsv
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Clostridioides_difficile.tsv
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecalis.tsv
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecium.tsv
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Escherichia.tsv
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_oxytoca.tsv
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_pneumoniae.tsv
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Neisseria_gonorrhoeae.tsv
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Salmonella.tsv
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Staphylococcus_aureus.tsv
-    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Streptococcus_pneumoniae.tsv
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Acinetobacter_baumannii.tsv 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Campylobacter.tsv 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Clostridioides_difficile.tsv 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecalis.tsv 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecium.tsv 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Escherichia.tsv 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_oxytoca.tsv 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_pneumoniae.tsv 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Neisseria_gonorrhoeae.tsv 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Salmonella.tsv 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Staphylococcus_aureus.tsv 1>> databaseprep.log 2>> databaseprep.error
+    wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Streptococcus_pneumoniae.tsv 1>> databaseprep.log 2>> databaseprep.error
     cat AMR_DNA-*.tsv |grep -v mutation_position > temp-mutation.tsv
     mv temp-mutation.tsv AMR_DNA-mutation.tsv
 fi
@@ -214,58 +228,136 @@ fi
 #build the kma database
 
 if ! test -f AMR_DNA_underscore.comp.b; then 
-    kma index -i AMR_DNA_underscore.fa -o AMR_DNA_underscore
+    echo "Building AMR_DNA KMA database"
+    kma index -i AMR_DNA_underscore.fa -o AMR_DNA_underscore 1>> databaseprep.log 2>> databaseprep.error
 fi
 
-#align the reads
-echo "Aligning reads to genes using kma"
-kma -t -bcNano -hmm -ont -t_db AMR_DNA_underscore -i $sample.fastq -o $sample -ID 99 -t 16 1> $sample.kma.stdout.log 2>$sample.kma.stderror.log
+
+
+##################
+### Alignments ###
+##################
+
+# we move to the outputfolder
+cd "$output"
+
+# prepare some initial files
+cat "$database"/AMRProt-mutation_underscore.tsv |cut -f 6 |sort |uniq |grep -v class > class
+cat "$database"/AMRProt-mutation_underscore.tsv |cut -f 2 |sort |uniq > accession
+cat "$database"/AMR_DNA-mutation_underscore.tsv |cut -f 5 |sort |uniq |grep -v class > dna_class
+cat "$database"/AMR_DNA-mutation_underscore.tsv |cut -f 1 |sort |uniq > dna_accession
+
+
+#align the reads against proteins
+echo "Aligning reads to proteins using diamond blastx"
+diamond blastx -d "$database"/AMRProt -q "$sample".fastq -o "$sample".prot.hits.txt -F 15 --range-culling -k1 --range-cover 5 --iterate --id 90 --subject-cover 90 --masking 0 --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore full_sseq qseq_translated 1>> "$sample".log 2>> "$sample".error
 
 # make the input for R
+echo "Parsing diamond output"
+echo "class	gene	read	reference	target	changes_str" >$sample.prot.input.tsv
+cat "$sample".prot.hits.txt  |cut -f 1,2,13,14 |sed "s/|/\t/g" |cut -f 1,3,12,13,14 |while read id accession gene reference target ; do
+    cat "$database"/AMRProt-mutation_underscore_combined.tsv |grep $accession |while read class accession changes ; do
+	echo $class $gene $id $reference $target $changes
+    done
+done | tr " " "\t" >>"$sample".prot.input.tsv
+
+#run the R script. Too lazy to do argument parsing with R
+echo "Scoring amino acid substitutions"
+cp "$sample".prot.input.tsv input.tsv
+R --vanilla < "$scriptlocation"/prot_score_mutations.R 1>> "$sample".log 2>> "$sample".error
+cp updated_table_with_scores_and_mutations.tsv $sample.prot.updated_table_with_scores_and_mutations.tsv
+rm input.tsv
+rm updated_table_with_scores_and_mutations.tsv
+
+#align the reads against DNA
+echo "Aligning reads to genes using kma"
+kma -t -bcNano -hmm -ont -t_db "$database"/AMR_DNA_underscore -i "$sample".fastq -o "$sample" -ID 90 -t 16 -nc -na 1>> "$sample".log 2>> "$sample".error
+
+# make the input for R. Hack to remove too short reads. KMA lengthfilter (-mrc 0.9) does not always work properly.
 echo "Parsing KMA output"
 echo "class	gene	read	reference	target	changes_str" >$sample.dna.input.tsv
 zcat $sample.frag.gz |cut -f 1,6,7 |cut -f 1 -d " " |while read target accession read ; do 
-    cat AMR_DNA_underscore_combined.tsv |grep $accession |while read class accession reference changes; do
+    cat $database/AMR_DNA_underscore_combined.tsv |grep $accession |while read class accession reference changes; do
 	echo $class $accession $read $reference $target $changes
     done
-done | tr " " "\t" >>$sample.dna.input.tsv
+done | tr " " "\t" |awk 'length($5) >= 0.9 * length($4)' >>$sample.dna.input.tsv
 
 #run the R script. Too lazy to do argument parsing with R
 echo "Scoring DNA mutations"
 cp $sample.dna.input.tsv input.tsv
-R --vanilla < dna_score_mutations.R 1> dna.R.log 2>dna.R.error
+R --vanilla < $scriptlocation/dna_score_mutations.R 1> $sample.log 2>$sample.error
 cp updated_table_with_scores_and_mutations.tsv $sample.dna.updated_table_with_scores_and_mutations.tsv
 rm input.tsv
 rm updated_table_with_scores_and_mutations.tsv
 
+########################
+### Reporting output ###
+########################
+
 #quick collation of results
-cat $sample.dna.updated_table_with_scores_and_mutations.tsv |grep -v None|cut -f 2 |grep -v gene |sort|uniq >gene
-echo class WT R |tr " " "\t" >$sample.dna.summary.txt
+cat "$sample".prot.updated_table_with_scores_and_mutations.tsv |grep -v None|cut -f 2 |grep -v gene |sort|uniq >gene
+echo class WT R |tr " " "\t" >"$sample".class.prot.summary.txt
+echo gene WT R |tr " " "\t" >"$sample".gene.prot.summary.txt
+
 cat class | while read class ; do
-    WT=`cat $sample.dna.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|cut -f 7 |grep -w 0 |wc -l`
-    R=`cat $sample.dna.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|cut -f 7 |grep -v -w 0 |wc -l`
-    echo $class $WT $R |tr " " "\t" >>$sample.dna.summary.txt
+    WT=`cat "$sample".prot.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|cut -f 7 |grep -w 0 |wc -l`
+    R=`cat "$sample".prot.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|cut -f 7 |grep -v -w 0 |wc -l`
+    echo $class $WT $R |tr " " "\t" >>"$sample".class.prot.summary.txt
     cat gene |while read gene ; do
-	WT=`cat $sample.dna.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|fgrep "$gene" |cut -f 7 |grep -w 0 |wc -l`
-	R=`cat $sample.dna.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|fgrep "$gene" |cut -f 7 |grep -v -w 0 |wc -l`
-	echo "$class"."$gene" $WT $R |tr " " "\t" |grep -v "0	0">>$sample.dna.summary.txt
+	WT=`cat "$sample".prot.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|fgrep "$gene" |cut -f 7 |grep -w 0 |wc -l`
+	R=`cat "$sample".prot.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|fgrep "$gene" |cut -f 7 |grep -v -w 0 |wc -l`
+	echo "$class"."$gene" $WT $R |tr " " "\t" |grep -v "0	0">>"$sample".gene.prot.summary.txt
+    done
+done
+
+echo
+if test -f "$sample.prot.updated_table_with_scores_and_mutations.tsv"; then
+    echo "Protein read classification output (WT/R) can be found in the file "$output"/"$sample".prot.updated_table_with_scores_and_mutations.tsv"
+else
+    echo "Protein read classification output not generated. Something went wrong"
+    exit 1
+fi
+
+if test -f ""$sample".class.prot.summary.txt"; then
+    echo "Class protein summary of classification output (WT/R) can be found in the file "$output"/"$sample".class.prot.summary.txt"
+    echo "Gene protein summary of classification output (WT/R) can be found in the file "$output"/"$sample".gene.prot.summary.txt"
+    echo
+else
+    echo "Protein summary output not generated. Something went wrong"
+    exit 1
+fi
+
+#quick collation of results
+cat "$sample".dna.updated_table_with_scores_and_mutations.tsv |grep -v None|cut -f 2 |grep -v gene |sort|uniq >gene
+echo class WT R |tr " " "\t" >"$sample".class.dna.summary.txt
+echo gene WT R |tr " " "\t" >"$sample".gene.dna.summary.txt
+
+cat class | while read class ; do
+    WT=`cat "$sample".dna.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|cut -f 7 |grep -w 0 |wc -l`
+    R=`cat "$sample".dna.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|cut -f 7 |grep -v -w 0 |wc -l`
+    echo $class $WT $R |tr " " "\t" >>"$sample".class.dna.summary.txt
+    cat gene |while read gene ; do
+	WT=`cat "$sample".dna.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|fgrep "$gene" |cut -f 7 |grep -w 0 |wc -l`
+	R=`cat "$sample".dna.updated_table_with_scores_and_mutations.tsv |grep -v class |grep "$class"|fgrep "$gene" |cut -f 7 |grep -v -w 0 |wc -l`
+	echo "$class"."$gene" $WT $R |tr " " "\t" |grep -v "0	0">>"$sample".gene.dna.summary.txt
     done
 done
 
 #report
 echo
-if test -f "$sample.dna.updated_table_with_scores_and_mutations.tsv"; then
-    echo "Read classification output (WT/R) can be found in the file $sample.dna.updated_table_with_scores_and_mutations.tsv"
+if test -f ""$sample".dna.updated_table_with_scores_and_mutations.tsv"; then
+    echo "DNA read classification output (WT/R) can be found in the file "$output"/"$sample".dna.updated_table_with_scores_and_mutations.tsv"
 else
-    echo "Read classification output not generated. Something went wrong"
+    echo "DNA read classification output not generated. Something went wrong"
     exit 1
 fi
 
-if test -f "$sample.dna.summary.txt"; then
-    echo "Summary of classification output (WT/R) can be found in the file $sample.dna.summary.txt"
+if test -f ""$sample".class.dna.summary.txt"; then
+    echo "Class DNA summary of classification output (WT/R) can be found in the file "$output"/"$sample".class.dna.summary.txt"
+    echo "Gene DNA summary of classification output (WT/R) can be found in the file "$output"/"$sample".gene.dna.summary.txt"
     echo
     exit 0
 else
-    echo "Summary output not generated. Something went wrong"
+    echo "DNA summary output not generated. Something went wrong"
     exit 1
 fi
