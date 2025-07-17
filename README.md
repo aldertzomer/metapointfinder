@@ -128,11 +128,11 @@ MULTIDRUG       134   33
 Example (`*.prot.updated_table_with_scores_and_mutations.tsv`):
 
 ```
-| class        | gene                                          | read                                   | reference | target | changes_str            | MutationScore | DetectedMutations |
-|--------------|-----------------------------------------------|-----------------------------------------|-----------|--------|------------------------|---------------|--------------------|
-| BETA-LACTAM  | two-component_system_sensor_histidine_kinase_BaeS | 10478f68-f181-4626-976f-93d14c49844b | ...       | ...    | Y42H,T175P,R153P       | 0             | None               |
-| COLISTIN     | two-component_system_sensor_histidine_kinase_PmrB | 1249bd62-efe5-46d5-96c4-1e903c85dec5 | ...       | ...    | V161G,T92P             | 1             | V161G              |
-| ...          | ...                                           | ...                                     | ...       | ...    | ...                    | ...           | ...                |
+| class        | gene                                              | read                                   | reference | target | changes_str            | MutationScore | DetectedMutations  |
+|--------------|---------------------------------------------------|----------------------------------------|-----------|--------|------------------------|---------------|--------------------|
+| BETA-LACTAM  | two-component_system_sensor_histidine_kinase_BaeS | 10478f68-f181-4626-976f-93d14c49844b   | ...       | ...    | Y42H,T175P,R153P       | 0             | None               |
+| COLISTIN     | two-component_system_sensor_histidine_kinase_PmrB | 1249bd62-efe5-46d5-96c4-1e903c85dec5   | ...       | ...    | V161G,T92P             | 1             | V161G              |
+| ...          | ...                                               | ...                                    | ...       | ...    | ...                    | ...           | ...                |
 
 ```
 
