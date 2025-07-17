@@ -250,7 +250,7 @@ cat "$database"/AMR_DNA-mutation_underscore.tsv |cut -f 1 |sort |uniq > dna_acce
 
 #align the reads against proteins
 echo "Aligning reads to proteins using diamond blastx"
-diamond blastx -d "$database"/AMRProt -q "$sample".fastq -o "$sample".prot.hits.txt -F 15 --range-culling -k1 --range-cover 5 --iterate --id 90 --subject-cover 90 --masking 0 --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore full_sseq qseq_translated 1>> "$sample".log 2>> "$sample".error
+diamond blastx -d "$database"/AMRProt -q "$sample".fastq -o "$sample".prot.hits.txt -F 15 --range-culling -k1 --range-cover 5 --iterate --id 80 --subject-cover 90 --masking 0 --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore full_sseq qseq_translated 1>> "$sample".log 2>> "$sample".error
 
 # make the input for R
 echo "Parsing diamond output"
@@ -271,7 +271,7 @@ rm updated_table_with_scores_and_mutations.tsv
 
 #align the reads against DNA
 echo "Aligning reads to genes using kma"
-kma -t -bcNano -hmm -ont -t_db "$database"/AMR_DNA_underscore -i "$sample".fastq -o "$sample" -ID 90 -t 16 -nc -na 1>> "$sample".log 2>> "$sample".error
+kma -t -bcNano -hmm -ont -t_db "$database"/AMR_DNA_underscore -i "$sample".fastq -o "$sample" -ID 80 -t 16 -nc -na 1>> "$sample".log 2>> "$sample".error
 
 # make the input for R. Hack to remove too short reads. KMA lengthfilter (-mrc 0.9) does not always work properly.
 echo "Parsing KMA output"
