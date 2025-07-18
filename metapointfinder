@@ -90,12 +90,15 @@ if ! [ -d "$database" ]
 fi
 
 #check if output is existing
-if [ -d "$output" ]
-  then
-    echo "Output folder already exists. Adding results to folder and potentially overwriting older results. Do not run metapointfinder in parallel on the same outputfolder." 1>&2
-    output=$(readlink -f "$output")
-  else
-    mkdir $output
+if [ -d "$output" ]; then
+    if [ "$4" = "force" ]; then
+        output=$(readlink -f "$output")
+    else
+        echo "Error: output folder already exists." 1>&2
+        exit 1
+    fi
+else
+    mkdir "$output"
     output=$(readlink -f "$output")
 fi
 
