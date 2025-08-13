@@ -326,7 +326,6 @@ if test -f "$sample.prot.updated_table_with_scores_and_mutations.tsv"; then
     echo "Protein read classification output (WT/R) can be found in the file "$output"/"$sample".prot.updated_table_with_scores_and_mutations.tsv"
 else
     echo "Protein read classification output not generated. Something went wrong"
-    #return 1
 fi
 
 if test -f ""$sample".class.prot.summary.txt"; then
@@ -335,7 +334,6 @@ if test -f ""$sample".class.prot.summary.txt"; then
     echo
 else
     echo "Protein summary output not generated. Something went wrong"
-    #return 1
 fi
 
 #quick collation of results
@@ -362,7 +360,6 @@ if test -f ""$sample".dna.updated_table_with_scores_and_mutations.tsv"; then
     echo "DNA read classification output (WT/R) can be found in the file "$output"/"$sample".dna.updated_table_with_scores_and_mutations.tsv"
 else
     echo "DNA read classification output not generated. Something went wrong"
-    #return 1
 fi
 
 if test -f ""$sample".class.dna.summary.txt"; then
@@ -372,5 +369,4 @@ if test -f ""$sample".class.dna.summary.txt"; then
     exit 0
 else
     echo "DNA summary output not generated. Something went wrong"
-    #return 1
 fi
