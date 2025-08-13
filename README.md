@@ -1,6 +1,6 @@
 # MetaPointFinder
 
-**MetaPointFinder** is a tool for detecting and scoring resistance-associated point mutations directly from long-read sequencing data (e.g. nanopore reads), using the AMRFinder database as reference. It combines protein- and DNA-level mutation detection to classify reads as wild-type (WT) or resistant (R), providing both read-level and summary-level output.
+**MetaPointFinder** is a tool for detecting and scoring resistance-associated point mutations directly from long-read and short-read metagenomics sequencing data, using the AMRFinder database as reference. It combines protein- and DNA-level mutation detection to classify reads as wild-type (WT) or resistant (R), or as UNKNOWN, providing both read-level and summary-level output.
 
 ---
 
@@ -9,7 +9,7 @@
 - Detects amino acid substitutions in translated reads using DIAMOND and AMRFinder protein mutation databases.
 - Detects nucleotide mutations using KMA against AMRFinder DNA databases.
 - Scores mutations using MSA-based alignment and outputs both read-level classifications and summary tables.
-- Supports direct analysis of long-read metagenomic datasets (nanopore fastq files).
+- Supports direct analysis of metagenomic datasets (nanopore or Illumina fastq files).
 
 ---
 
@@ -63,7 +63,7 @@ OR for gzipped input:
 
 ### Arguments
 
-- `input.fastq` or `input.fastq.gz`: Nanopore long-read data file.
+- `input.fastq` or `input.fastq.gz`: sequence read data file. Currently paired read data is not used.
 - `database_folder`: Directory where AMRFinder databases will be downloaded/prepared.
 - `output_folder`: Directory to store all results.
 
@@ -83,15 +83,17 @@ OR for gzipped input:
    - Reads aligned to AMR genes using KMA.
    - Matching regions extracted and scored using the provided R scripts.
 
-3. **Mutation Scoring (R):**
+3. **Mutation Scoring (in R):**
    - Translated protein reads and DNA reads are aligned to references using ClustalW (via the `msa` R package).
    - Known mutations from AMRFinder mutation tables are searched for.
    - Each read is scored:
      - **MutationScore:** Number of known resistance mutations detected.
      - **DetectedMutations:** List of mutations found (or "None").
-
+     - **WTConfirmedPositions:** Number of WT positions detected.
+     - **Status:** Scoring of read as Wildtype (WT), Resistant (R) or Unknown (UNKNOWN)
+     
 4. **Results Aggregation:**
-   - WT and R counts summarized by antibiotic class and gene.
+   - WT, R and UNKNOWN counts summarized by antibiotic class and gene.
 
 ---
 
@@ -99,8 +101,8 @@ OR for gzipped input:
 
 | File                                               | Description                                                     |
 |----------------------------------------------------|-----------------------------------------------------------------|
-| `*.prot.updated_table_with_scores_and_mutations.tsv` | Read-level protein mutation classification (WT/R).              |
-| `*.dna.updated_table_with_scores_and_mutations.tsv`  | Read-level DNA mutation classification (WT/R).                  |
+| `*.prot.updated_table_with_scores_and_mutations.tsv` | Read-level protein mutation classification (WT/R/UNKNOWN).    |
+| `*.dna.updated_table_with_scores_and_mutations.tsv`  | Read-level DNA mutation classification (WT/R/UNKNOWN).        |
 | `*.class.prot.summary.txt`                           | WT/R summary per antibiotic class (protein level).              |
 | `*.gene.prot.summary.txt`                            | WT/R summary per gene (protein level).                          |
 | `*.class.dna.summary.txt`                            | WT/R summary per antibiotic class (DNA level).                  |
@@ -114,11 +116,11 @@ OR for gzipped input:
 Example (`*.class.prot.summary.txt`):
 
 ```
-class           WT    R
-BETA-LACTAM     255   44
-COLISTIN        59    12
-QUINOLONE       185   25
-MULTIDRUG       134   33
+class           WT    R     UNKNOWN
+BETA-LACTAM     255   44    2003
+COLISTIN        59    12    2938
+QUINOLONE       185   25    3209
+MULTIDRUG       134   33    2635
 ```
 
 ---
@@ -128,11 +130,11 @@ MULTIDRUG       134   33
 Example (`*.prot.updated_table_with_scores_and_mutations.tsv`):
 
 ```
-| class        | gene                                              | read                                   | reference | target | changes_str            | MutationScore | DetectedMutations  |
-|--------------|---------------------------------------------------|----------------------------------------|-----------|--------|------------------------|---------------|--------------------|
-| BETA-LACTAM  | two-component_system_sensor_histidine_kinase_BaeS | 10478f68-f181-4626-976f-93d14c49844b   | ...       | ...    | Y42H,T175P,R153P       | 0             | None               |
-| COLISTIN     | two-component_system_sensor_histidine_kinase_PmrB | 1249bd62-efe5-46d5-96c4-1e903c85dec5   | ...       | ...    | V161G,T92P             | 1             | V161G              |
-| ...          | ...                                               | ...                                    | ...       | ...    | ...                    | ...           | ...                |
+| class        | gene                                              | read                                   | reference | target | changes_str            | MutationScore | DetectedMutations  | WTConfirmedPositions | Status |
+|--------------|---------------------------------------------------|----------------------------------------|-----------|--------|------------------------|---------------|--------------------|----------------------|--------|
+| BETA-LACTAM  | two-component_system_sensor_histidine_kinase_BaeS | 10478f68-f181-4626-976f-93d14c49844b   | ...       | ...    | Y42H,T175P,R153P       | 0             | None               | 3                    | WT     |
+| COLISTIN     | two-component_system_sensor_histidine_kinase_PmrB | 1249bd62-efe5-46d5-96c4-1e903c85dec5   | ...       | ...    | V161G,T92P             | 1             | V161G              | 2                    | R      |
+| ...          | ...                                               | ...                                    | ...       | ...    | ...                    | ...           | ...                | ...                  |        |
 
 ```
 
@@ -144,6 +146,8 @@ Example (`*.prot.updated_table_with_scores_and_mutations.tsv`):
 - **changes_str:** List of expected mutations.
 - **MutationScore:** Number of detected resistance mutations.
 - **DetectedMutations:** Mutations actually found in the read.
+- **WTConfirmedPositions:** Number of WT positions detected.
+- **Status:** Scoring of read as Wildtype (WT), Resistant (R) or Unknown (UNKNOWN)
 
 ---
 
@@ -152,7 +156,8 @@ Example (`*.prot.updated_table_with_scores_and_mutations.tsv`):
 - Ensure **DIAMOND v2.0.15** is used. Other versions may not work as expected.
 - Databases are downloaded directly from NCBI during the first run.
 - Mutation detection relies on known mutations in the AMRFinder database. Novel mutations will not be scored.
-- For metagenomic samples with highly fragmented reads, alignment quality directly affects detection sensitivity.
+- For metagenomic samples with highly fragmented reads, alignment quality may affect detection sensitivity. 
+- There is a correlation between fragmentation and number of reads scored as WT and UNKNOWN.
 
 ---
 
