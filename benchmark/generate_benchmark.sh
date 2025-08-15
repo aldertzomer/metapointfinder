@@ -33,10 +33,13 @@ for cut in Eecoli Estaau Emyctu ; do
     done
 done |parallel -j 64 >/dev/null
 
-# combine the data from the different codon usage tables into one file
-for r in 0.00 0.01 0.02 0.03 0.05 0.1 0.2 ; do
-    cat benchmark/E*.100.$r.fastq > benchmark/allspecies.100.$r.fastq
-    cat benchmark/E*.200.$r.fastq > benchmark/allspecies.200.$r.fastq
-    cat benchmark/E*.1000.$r.fastq > benchmark/allspecies.1000.$r.fastq
-    cat benchmark/E*.5000.$r.fastq > benchmark/allspecies.5000.$r.fastq
-done
+# run metapointfinder on all outputs
+for cut in Eecoli Estaau Emyctu ; do
+    for r in 0.00 0.01 0.02 0.03 0.05 0.1 0.2 ; do
+	echo "/data/tools/metapointfinder/metapointfinder/metapointfinder $cut.100.$r.fastq /mnt/data/db/metapointfinderdb mpf.$cut.100.$r"
+	echo "/data/tools/metapointfinder/metapointfinder/metapointfinder $cut.200.$r.fastq /mnt/data/db/metapointfinderdb mpf.$cut.200.$r"
+	echo "/data/tools/metapointfinder/metapointfinder/metapointfinder $cut.1000.$r.fastq /mnt/data/db/metapointfinderdb mpf.$cut.1000.$r"
+	echo "/data/tools/metapointfinder/metapointfinder/metapointfinder $cut.5000.$r.fastq /mnt/data/db/metapointfinderdb mpf.$cut.5000.$r"
+    done
+done |parallel -j 64
+
