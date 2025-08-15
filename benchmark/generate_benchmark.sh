@@ -1,4 +1,4 @@
-# this generates a set of benchmark fastq files based on the amrprot database of amrfinder as processed by metapointfinder
+# this generates a set of benchmark fastq files based on the amrprot database of amrfinder as processed by metapointfinder and then processes these and scores them for TP, TN, FP
 # copy the files in this folder to the metapointfinderdb folder and run it from there
 
 #make output folder
@@ -26,20 +26,29 @@ done |parallel -j 64
 #for cut in Eacica Eagrtu Ebacsu Ebraja Ecaucr Echltr Echlre Ecloab Eerwct Eecoli Ebacst Ehaein Ehalsa Eklepn Elacdl Emyctu Eneigo Epseae Erhile Erhosh Esalty Eserma Erhime Estaau Estrpn Estrco Esynco Etheth Evibch Eyeren  ; do
 for cut in Eecoli Estaau Emyctu ; do
     for r in 0.00 0.01 0.02 0.03 0.05 0.1 0.2 ; do
-	echo "wgsim -N 100000 -1 100 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.100.$r.fastq /dev/null"
-	echo "wgsim -N 50000 -1 200 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.200.$r.fastq /dev/null"
-	echo "wgsim -N 10000 -1 1000 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.1000.$r.fastq /dev/null"
-	echo "wgsim -N 2000 -1 5000 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.5000.$r.fastq /dev/null"
+	echo "wgsim -N 1000000 -1 100 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.100.$r.fastq /dev/null"
+	echo "wgsim -N 500000 -1 200 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.200.$r.fastq /dev/null"
+	echo "wgsim -N 100000 -1 1000 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.1000.$r.fastq /dev/null"
+	echo "wgsim -N 20000 -1 5000 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.5000.$r.fastq /dev/null"
     done
 done |parallel -j 64 >/dev/null
 
-# run metapointfinder on all outputs
+# run metapointfinder on all outputs. change the locations of the tool and the db to suit your needs
 for cut in Eecoli Estaau Emyctu ; do
     for r in 0.00 0.01 0.02 0.03 0.05 0.1 0.2 ; do
-	echo "/data/tools/metapointfinder/metapointfinder/metapointfinder $cut.100.$r.fastq /mnt/data/db/metapointfinderdb mpf.$cut.100.$r"
-	echo "/data/tools/metapointfinder/metapointfinder/metapointfinder $cut.200.$r.fastq /mnt/data/db/metapointfinderdb mpf.$cut.200.$r"
-	echo "/data/tools/metapointfinder/metapointfinder/metapointfinder $cut.1000.$r.fastq /mnt/data/db/metapointfinderdb mpf.$cut.1000.$r"
-	echo "/data/tools/metapointfinder/metapointfinder/metapointfinder $cut.5000.$r.fastq /mnt/data/db/metapointfinderdb mpf.$cut.5000.$r"
+	echo "/mnt/data/tools/metapointfinder/metapointfinder/metapointfinder benchmark/$cut.100.$r.fastq /mnt/data/db/metapointfinderdb benchmark/mpf.$cut.100.$r"
+	echo "/mnt/data/tools/metapointfinder/metapointfinder/metapointfinder benchmark/$cut.200.$r.fastq /mnt/data/db/metapointfinderdb benchmark/mpf.$cut.200.$r"
+	echo "/mnt/data/tools/metapointfinder/metapointfinder/metapointfinder benchmark/$cut.1000.$r.fastq /mnt/data/db/metapointfinderdb benchmark/mpf.$cut.1000.$r"
+	echo "/mnt/data/tools/metapointfinder/metapointfinder/metapointfinder benchmark/$cut.5000.$r.fastq /mnt/data/db/metapointfinderdb benchmark/mpf.$cut.5000.$r"
     done
 done |parallel -j 64
+
+# this thing checks if the information in the header is the same as the prediction. We only check WT reads and Wildtype prediction (TN) and RES reads and Resistance prediction (TP). There will be many false negatives and unknowns as many of the shorter reads do not cover the resistance determining region, therefore these are not scored. False Positives can occur by chance in the reads with mutation.
+echo "file,TP,TN,FP" > benchmark/final_scores.csv
+find benchmark |grep prot.updated_table_with_scores_and_mutations.tsv |while read output ; do
+    echo $output |tr "\n" ","
+    cat $output  |sed 's/_0:/\t/' |cut -f 1,3,11 |awk -F'\t' 'BEGIN{OFS="\t"}{split($2,a,"_");if(length(a)>2){$2=a[1];for(i=2;i<=length(a)-2;i++)$2=$2"_"a[i]}print}'|sort|uniq |grep Wildtype |while read drug name result ; do  echo $name |grep "$drug"_WT ; done |wc -l |tr "\n" ","
+    cat $output  |sed 's/_0:/\t/' |cut -f 1,3,11 |awk -F'\t' 'BEGIN{OFS="\t"}{split($2,a,"_");if(length(a)>2){$2=a[1];for(i=2;i<=length(a)-2;i++)$2=$2"_"a[i]}print}'|sort|uniq |grep Resistant |while read drug name result ; do  echo $name |grep "$drug"_RES ; done |wc -l
+    cat $output  |sed 's/_0:/\t/' |cut -f 1,3,11 |awk -F'\t' 'BEGIN{OFS="\t"}{split($2,a,"_");if(length(a)>2){$2=a[1];for(i=2;i<=length(a)-2;i++)$2=$2"_"a[i]}print}'|sort|uniq |grep Resistant |while read drug name result ; do  echo $name |grep "$drug"_WT ; done |wc -l
+done >>benchmark/final_scores.csv
 
