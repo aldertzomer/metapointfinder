@@ -149,11 +149,17 @@ cat AMRProt-mutation_underscore.tsv |cut -f 2 |sort |uniq > accession
 echo "Prepping AMRProt mutation database"
 cat class |while read class ; do
     cat accession |while read accession; do 
-	cat AMRProt-mutation_underscore.tsv |cut -f 2,4,6 |grep -w "$class" |grep -w "$accession" |sort -nk 1 |while read accession mutation class ; do
-	    mutation_cleaned=`echo "$mutation" |cut -f 2 -d _|sed 's/del/-/g'|sed 's/STOP/-/g'` 
-	    changes_str=`echo "$mutation_cleaned"",""$changes_str"`
-	    echo "$class" "$accession" "$changes_str" |sed 's/,$//'
-	done |sed 's/,$//' |tail -n 1|tr " " "\t" >> AMRProt-mutation_underscore_combined.tsv
+	cat AMRProt-mutation_underscore.tsv |cut -f 2,3,4,6 |grep -w "$class" |grep -w "$accession" |sort -nk 1 |while read accession position mutation_original class ; do
+            mutation_cleaned=`echo "$mutation_original" |cut -f 2 -d _`
+            baseright=`echo $mutation_cleaned |tr '0-9' '\t'|tr -s "\t"|cut -f 2`
+            baseleft=`echo $mutation_cleaned  |tr '0-9' '\t'|cut -f 1`
+            mutation="${baseleft}${position}${baseright}"
+            changes_str=`echo "$mutation"",""$changes_str"`
+            echo "$class" "$accession" "$sequence" "$changes_str" |sed 's/del/-/g'|sed 's/STOP/-/g' |sed 's/,$//'
+#	    mutation_cleaned=`echo "$mutation" |cut -f 2 -d _|sed 's/del/-/g'|sed 's/STOP/-/g'` 
+#	    changes_str=`echo "$mutation_cleaned"",""$changes_str"`
+#	    echo "$class" "$accession" "$changes_str" |sed 's/,$//'
+	done |sed 's/,$//' |tail -n 1|tr -s " "|tr " " "\t" >> AMRProt-mutation_underscore_combined.tsv
     done
 done
 fi

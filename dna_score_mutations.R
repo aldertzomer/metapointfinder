@@ -36,6 +36,11 @@ calculate_mutation_score <- function(reference, target, changes_str) {
     # Normalize sequences: uppercase, strip whitespace; IMPORTANT: no pre-gapped reads
     reference <- toupper(gsub("[ \r\n\t]", "", reference))
     target    <- toupper(gsub("[- \r\n\t]", "", target))
+    
+    # Pad the TARGET (read) with N's to prevent terminal-gap artefacts in msa()
+    pad_len <- 4000L
+    pad_blk <- paste(rep("N", pad_len), collapse = "")
+    target  <- paste0(pad_blk, target, pad_blk)
 
     # Align with ClustalW
     sequences <- DNAStringSet(c(Reference = reference, Target = target))

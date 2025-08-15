@@ -3,123 +3,193 @@ library(msa)
 library(Biostrings)
 
 # ----- Core scorer (protein) -----
-# Reference-anchored indexing + robust single-AA deletion detection (±1 around the mapped col).
+# Reference-anchored indexing + robust indel/substitution handling with strict ref checks
 calculate_mutation_score <- function(reference, target, changes_str) {
   if (is.null(changes_str) || changes_str == "" || is.na(changes_str)) {
     return(list(score = 0, detected_mutations = "None", wt_confirmed_positions = 0, status = "Unknown"))
   }
 
-  # Parse mutations like A51V, Q42- (single AA del)
-  change_pairs <- strsplit(changes_str, ",")[[1]]
-  change_pairs <- trimws(change_pairs)
-
-  change_data <- data.frame(
-    Position    = numeric(0),
-    ReferenceAA = character(0),
-    TargetAA    = character(0),
-    stringsAsFactors = FALSE
-  )
-
-  for (chg in change_pairs) {
-    if (nchar(chg) < 3) next
-    pos <- suppressWarnings(as.numeric(gsub("[^0-9]", "", chg)))
-    if (is.na(pos)) next
-    ref_aa <- toupper(substr(chg, 1, 1))
-    tgt_aa <- toupper(substr(chg, nchar(chg), nchar(chg)))  # "-" for deletion
-    change_data <- rbind(change_data, data.frame(
-      Position = pos, ReferenceAA = ref_aa, TargetAA = tgt_aa
-    ))
+  # --- Parse tokens like A51V, Q42-, ASLD153-, R335RVPYR, N474KG, G194GSG ---
+  tokens <- trimws(strsplit(changes_str, ",")[[1]])
+  parse_token <- function(tok) {
+    tok <- toupper(tok)
+    m <- regexec("^([A-Z]+)([0-9]+)([A-Z\\-]+)$", tok)
+    mm <- regmatches(tok, m)[[1]]
+    if (length(mm) != 4) return(NULL)
+    list(RefSeg = mm[2], Pos = as.integer(mm[3]), AltSeg = mm[4], Raw = tok)
+  }
+  parsed <- lapply(tokens, parse_token)
+  parsed <- parsed[!vapply(parsed, is.null, logical(1))]
+  if (length(parsed) == 0) {
+    return(list(score = 0, detected_mutations = "None", wt_confirmed_positions = 0, status = "Unknown"))
   }
 
   tryCatch({
-    # Normalize sequences (uppercase, strip whitespace). IMPORTANT: strip any literal gaps from raw target
+    # --- Normalize sequences (strip gaps from target); pad TARGET with X to avoid terminal artefacts ---
     reference <- toupper(gsub("[ \r\n\t]", "", reference))
     target    <- toupper(gsub("[- \r\n\t]", "", target))
 
-    # Align. Using ClustalW method as that does not delete flanks
+    pad_len <- 2000L
+    pad_blk <- paste(rep("X", pad_len), collapse = "")
+    target  <- paste0(pad_blk, target, pad_blk)
+
+    # --- Align (ClustalW keeps flanks) ---
     sequences <- AAStringSet(c(Reference = reference, Target = target))
     aln <- msa(sequences, method = "ClustalW", verbose = FALSE)
-
-    # Extract aligned strings (with gaps preserved)
     aligned_ref    <- as.character(unmasked(aln)["Reference"])
     aligned_target <- as.character(unmasked(aln)["Target"])
     ref_chars    <- strsplit(aligned_ref, "")[[1]]
-    target_chars <- strsplit(aligned_target, "")[[1]]
+    targ_chars   <- strsplit(aligned_target, "")[[1]]
 
-    # Reference-anchored: map ungapped reference positions -> alignment columns
+    # Map ungapped reference positions -> alignment columns
     ref_pos_to_col <- which(ref_chars != "-")
     max_ref_pos <- length(ref_pos_to_col)
 
-    score <- 0
-    detected_mutations <- character(0)
-    wt_confirmed <- 0
+    # Helpers
+    take_at_cols   <- function(chars, cols) paste(chars[cols], collapse = "")
+    is_informative <- function(aa) !(aa %in% c("-", "X"))
 
-    for (i in seq_len(nrow(change_data))) {
-      pos       <- change_data$Position[i]
-      ref_AA    <- change_data$ReferenceAA[i]
-      target_AA <- change_data$TargetAA[i]  # "-" for deletion, or a residue for substitution
+    score <- 0L
+    detected <- character(0)
+    wt_conf <- 0L
 
-      if (is.na(pos) || pos < 1 || pos > max_ref_pos) next
+    for (p in parsed) {
+      pos     <- p$Pos
+      ref_seg <- p$RefSeg
+      alt_seg <- p$AltSeg
+      raw_tok <- p$Raw
 
-      col_idx <- ref_pos_to_col[pos]  # alignment column corresponding to reference position `pos`
-      aa_ref_at_pos  <- ref_chars[col_idx]
-      aa_read_at_pos <- target_chars[col_idx]
+      ref_len <- nchar(ref_seg)
+      alt_len <- nchar(alt_seg)
 
-      # --- Deletions (e.g., Q42-) ---
-      if (target_AA == "-") {
-        # tolerate ClustalW left/right gap jitter by checking col_idx, col_idx-1, col_idx+1
-        called_del <- FALSE
+      if (is.na(pos) || pos < 1 || (pos + ref_len - 1) > max_ref_pos) next
 
-        # helper to test a candidate column
-        check_gap_at <- function(j) {
-          if (j < 1 || j > length(target_chars)) return(FALSE)
-          # We only accept a gap if the reference residue at `pos` is indeed `ref_AA`
-          # (i.e., the mutation spec matches the reference sequence)
-          if (ref_chars[col_idx] != ref_AA) return(FALSE)
-          # Count deletion if the read shows a gap at j and the reference at j is *not* a gap
-          # (so it's a real residue position, not a ref gap)
-          target_chars[j] == "-" && ref_chars[j] != "-"
-        }
+      # Alignment columns spanned by the reference segment (contiguous in reference coords)
+      ref_cols     <- ref_pos_to_col[pos:(pos + ref_len - 1)]
+      ref_at_cols  <- take_at_cols(ref_chars, ref_cols)
+      targ_at_cols <- take_at_cols(targ_chars, ref_cols)
 
-        if (check_gap_at(col_idx) ||
-            check_gap_at(col_idx - 1) ||
-            check_gap_at(col_idx + 1)) {
-          score <- score + 1
-          detected_mutations <- c(detected_mutations, paste0(ref_AA, pos, "-"))
-          called_del <- TRUE
-        }
-
-        # If no deletion called but we do see explicit WT at the mapped column, confirm WT
-        if (!called_del && aa_read_at_pos == ref_AA) {
-          wt_confirmed <- wt_confirmed + 1
+      # ========== CASE 1: Deletions ==========
+      if (alt_seg == "-") {
+        if (ref_len == 1) {
+          # Single-AA deletion, allow ±1 col jitter but REQUIRE correct ref at site
+          col_idx <- ref_cols[1]
+          # require that the reference column holds the expected ref AA
+          if (ref_chars[col_idx] == ref_seg) {
+            check_gap_at <- function(j) {
+              if (j < 1 || j > length(targ_chars)) return(FALSE)
+              (ref_chars[j] != "-") && (targ_chars[j] == "-")
+            }
+            if (check_gap_at(col_idx) || check_gap_at(col_idx - 1) || check_gap_at(col_idx + 1)) {
+              score <- score + 1L
+              detected <- c(detected, paste0(ref_seg, pos, "-"))
+            } else if (targ_chars[col_idx] == ref_seg) {
+              wt_conf <- wt_conf + 1L
+            }
+          }
+        } else {
+          # Multi-AA deletion: require token's ref segment is present at those ref columns
+          # and all those columns are gaps in the target
+          if (ref_at_cols == ref_seg) {
+            gaps <- vapply(ref_cols, function(j) targ_chars[j] == "-", logical(1))
+            if (all(gaps)) {
+              score <- score + 1L
+              detected <- c(detected, paste0(ref_seg, pos, "-"))
+            } else if (targ_at_cols == ref_seg) {
+              wt_conf <- wt_conf + 1L
+            }
+          }
         }
         next
       }
 
-      # --- Substitutions & WT confirmation ---
-      # Treat gap/unknown in the READ as uninformative
-      if (aa_read_at_pos %in% c("-", "X")) next
-
-      if (aa_read_at_pos == target_AA) {
-        # Resistance substitution detected
-        score <- score + 1
-        detected_mutations <- c(detected_mutations, paste0(ref_AA, pos, target_AA))
-      } else if (aa_ref_at_pos == ref_AA && aa_read_at_pos == ref_AA) {
-        # Explicit WT confirmation at this mutation site
-        wt_confirmed <- wt_confirmed + 1
+      # ========== CASE 2: "Insertion-after" (e.g., R335RVPYR) ==========
+      # Keep first ref AA (must match), insert tail immediately after in reference-gap columns.
+      if (ref_len == 1 && alt_len > 1 && substr(alt_seg, 1, 1) == ref_seg) {
+        col_idx <- ref_cols[1]
+        # Strict: reference at this column must match the token's ref AA
+        if (ref_chars[col_idx] == ref_seg) {
+          base_ok <- (targ_chars[col_idx] == ref_seg)
+          alt_tail <- substring(alt_seg, 2)
+          tail_needed <- nchar(alt_tail)
+          # scan forward to collect insertion residues only where reference has '-'
+          j <- col_idx + 1
+          tail_seen <- character(0)
+          while (j <= length(ref_chars) && nchar(paste(tail_seen, collapse = "")) < tail_needed) {
+            if (ref_chars[j] == "-") {
+              aa <- targ_chars[j]
+              if (is_informative(aa)) tail_seen <- c(tail_seen, aa)
+            } else {
+              # once we re-enter real reference, stop if we've started collecting
+              if (length(tail_seen) > 0) break
+            }
+            j <- j + 1
+          }
+          tail_seq <- paste(tail_seen, collapse = "")
+          if (base_ok && tail_seq == alt_tail) {
+            score <- score + 1L
+            detected <- c(detected, raw_tok)
+          } else if (base_ok) {
+            wt_conf <- wt_conf + 1L
+          }
+        }
+        next
       }
-      # else: some other mismatch – ignore under simplified rule
+
+      # ========== CASE 3: Equal-length replacement/substitution (incl. multi-AA) ==========
+      if (ref_len == alt_len && alt_seg != ref_seg) {
+        # STRICT: require the reference block equals the token's RefSeg
+        if (ref_at_cols == ref_seg) {
+          targ_block <- targ_at_cols
+          # Need all informative residues to compare
+          if (!grepl("[-X]", targ_block)) {
+            if (targ_block == alt_seg) {
+              score <- score + 1L
+              detected <- c(detected, raw_tok)
+            } else if (targ_block == ref_seg) {
+              wt_conf <- wt_conf + 1L
+            }
+          }
+        } else if (targ_at_cols == ref_seg && !grepl("[-X]", targ_at_cols)) {
+          # explicit WT block at site
+          wt_conf <- wt_conf + 1L
+        }
+        next
+      }
+
+      # ========== CASE 4: Single-AA substitution fallback with strict ref check ==========
+      if (ref_len == 1 && alt_len == 1 && alt_seg != ref_seg) {
+        col_idx <- ref_cols[1]
+        aa_ref_at_pos  <- ref_chars[col_idx]
+        aa_read_at_pos <- targ_chars[col_idx]
+        # Treat gap/unknown in READ as uninformative
+        if (!(aa_read_at_pos %in% c("-", "X"))) {
+          # STRICT: ref at site must match token's ref AA
+          if (aa_ref_at_pos == ref_seg && aa_read_at_pos == alt_seg) {
+            score <- score + 1L
+            detected <- c(detected, paste0(ref_seg, pos, alt_seg))
+          } else if (aa_ref_at_pos == ref_seg && aa_read_at_pos == ref_seg) {
+            wt_conf <- wt_conf + 1L
+          }
+        }
+        next
+      }
+
+      # ========== CASE 5: Other patterns not explicitly modeled ==========
+      # Be conservative: only confirm WT if the exact ref segment is present and informative
+      if (ref_at_cols == ref_seg && targ_at_cols == ref_seg && !grepl("[-X]", targ_at_cols)) {
+        wt_conf <- wt_conf + 1L
+      }
+      # else: leave as Unknown
     }
 
-    detected_mutations_str <- if (length(detected_mutations) > 0) paste(detected_mutations, collapse = ", ") else "None"
-
-    # Status rule: Resistant if any R; else WT if any WT; else Unknown
-    status <- if (score > 0) "Resistant" else if (wt_confirmed > 0) "Wildtype" else "Unknown"
+    detected_str <- if (length(detected) > 0) paste(detected, collapse = ", ") else "None"
+    status <- if (score > 0) "Resistant" else if (wt_conf > 0) "Wildtype" else "Unknown"
 
     list(
       score = score,
-      detected_mutations = detected_mutations_str,
-      wt_confirmed_positions = wt_confirmed,
+      detected_mutations = detected_str,
+      wt_confirmed_positions = wt_conf,
       status = status
     )
 
