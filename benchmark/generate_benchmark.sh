@@ -28,7 +28,7 @@ for cut in Eecoli Estaau Emyctu ; do
     for r in 0.00 0.01 0.02 0.03 0.05 0.1 0.2 ; do
 	echo "wgsim -N 100000 -1 100 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.100.$r.fastq /dev/null"
 	echo "wgsim -N 50000 -1 200 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.200.$r.fastq /dev/null"
-	echo "wgsim -N 1000 -1 1000 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.1000.$r.fastq /dev/null"
+	echo "wgsim -N 10000 -1 1000 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.1000.$r.fastq /dev/null"
 	echo "wgsim -N 2000 -1 5000 -d 0 -S 42 -e 0 -r $r benchmark/$cut.6000.fasta benchmark/$cut.5000.$r.fastq /dev/null"
     done
 done |parallel -j 64 >/dev/null
