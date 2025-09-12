@@ -281,7 +281,7 @@ rm updated_table_with_scores_and_mutations.tsv
 
 #align the reads against DNA
 echo "Aligning reads to genes using kma"
-kma -t -bcNano -hmm -ont -t_db "$database"/AMR_DNA_underscore -i "$sample".fastq -o "$sample" -t 16 -nc -na 1>> "$sample".log 2>> "$sample".error
+kma -t -bcNano -hmm -ont -t_db "$database"/AMR_DNA_underscore -i "$sample".fastq -o "$sample" -t 16 -nc -na -1t1 1>> "$sample".log 2>> "$sample".error
 
 # we delete the temp fastq file
 rm "$sample".fastq

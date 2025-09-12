@@ -1,130 +1,124 @@
 # Required libraries
-library(msa)
 library(Biostrings)
+library(pwalign)
 
-# ----- Core scorer (DNA) -----
-# Reference-anchored indexing + robust single-base deletion detection (±1 around mapped col).
-calculate_mutation_score <- function(reference, target, changes_str) {
+
+calculate_mutation_score <- function(reference, target, changes_str, debug = FALSE) {
   if (is.null(changes_str) || changes_str == "" || is.na(changes_str)) {
     return(list(score = 0, detected_mutations = "None",
                 wt_confirmed_positions = 0, status = "Unknown"))
   }
 
-  # Parse mutations like A198G, A198- (single base deletion)
+  # Parse mutations like A15G, G43-, etc.
   change_pairs <- strsplit(changes_str, ",")[[1]]
   change_pairs <- trimws(change_pairs)
-
   change_data <- data.frame(
-    Position     = numeric(0),
+    Position = numeric(0),
     ReferenceDNA = character(0),
-    TargetDNA    = character(0),
+    TargetDNA = character(0),
     stringsAsFactors = FALSE
   )
-
   for (chg in change_pairs) {
     if (nchar(chg) < 3) next
     pos <- suppressWarnings(as.numeric(gsub("[^0-9]", "", chg)))
     if (is.na(pos)) next
     ref_base <- toupper(substr(chg, 1, 1))
     tgt_base <- toupper(substr(chg, nchar(chg), nchar(chg)))  # "-" for deletion
-    change_data <- rbind(change_data, data.frame(
-      Position = pos, ReferenceDNA = ref_base, TargetDNA = tgt_base
-    ))
+    change_data <- rbind(change_data,
+                         data.frame(Position = pos, ReferenceDNA = ref_base, TargetDNA = tgt_base))
   }
 
   tryCatch({
-    # Normalize sequences: uppercase, strip whitespace; IMPORTANT: no pre-gapped reads
+    # Normalize inputs
     reference <- toupper(gsub("[ \r\n\t]", "", reference))
     target    <- toupper(gsub("[- \r\n\t]", "", target))
-    
-    # Pad the TARGET (read) with N's to prevent terminal-gap artefacts in msa()
-    pad_len <- 4000L
-    pad_blk <- paste(rep("N", pad_len), collapse = "")
-    target  <- paste0(pad_blk, target, pad_blk)
 
-    # Align with ClustalW
-    sequences <- DNAStringSet(c(Reference = reference, Target = target))
-    aln <- msa(sequences, method = "ClustalW", verbose = FALSE)
+    # Align: force full reference (pattern) to align; read (subject) can overhang
+    submat <- nucleotideSubstitutionMatrix(match = 2, mismatch = -5, baseOnly = TRUE)
+    pa <-  pairwiseAlignment(pattern = DNAString(reference),
+                            subject = DNAString(target),
+                            type = "global-local",
+                            substitutionMatrix = submat,
+                            gapOpening = -10, gapExtension = -0.5)
 
-    # Extract aligned strings (with gaps)
-    aligned_ref    <- as.character(unmasked(aln)["Reference"])
-    aligned_target <- as.character(unmasked(aln)["Target"])
+    aligned_ref    <- as.character(alignedPattern(pa))
+    aligned_target <- as.character(alignedSubject(pa))
     ref_chars    <- strsplit(aligned_ref, "")[[1]]
     target_chars <- strsplit(aligned_target, "")[[1]]
 
-    # Map ungapped reference positions -> alignment columns
-    ref_pos_to_col <- which(ref_chars != "-")
-    max_ref_pos <- length(ref_pos_to_col)
+    # Build alignment-column -> reference-position map (NA where ref has a gap)
+    ref_pos_at_col <- rep(NA_integer_, length(ref_chars))
+    rp <- 0L
+    for (k in seq_along(ref_chars)) {
+      if (ref_chars[k] != "-") {
+        rp <- rp + 1L
+        ref_pos_at_col[k] <- rp
+      }
+    }
+    max_ref_pos <- rp
 
-    score <- 0
-    detected_mutations <- character(0)
-    wt_confirmed <- 0
+    informative <- function(b) b %in% c("A","C","G","T")
+
+    score <- 0L
+    wt_confirmed <- 0L
+    detected <- character(0)
 
     for (i in seq_len(nrow(change_data))) {
       pos        <- change_data$Position[i]
       ref_DNA    <- change_data$ReferenceDNA[i]
-      target_DNA <- change_data$TargetDNA[i]  # "-" for deletion, or base for substitution
+      target_DNA <- change_data$TargetDNA[i]
 
       if (is.na(pos) || pos < 1 || pos > max_ref_pos) next
 
-      col_idx <- ref_pos_to_col[pos]  # alignment col for that reference position
-      base_ref_at_pos  <- ref_chars[col_idx]
-      base_read_at_pos <- target_chars[col_idx]
+      # find the unique alignment column that corresponds to reference position `pos`
+      cols <- which(ref_pos_at_col == pos)
+      if (length(cols) != 1L) {
+        if (debug) message(sprintf("Reference pos %d not uniquely mapped (cols: %s)", pos, paste(cols, collapse=",")))
+        next
+      }
+      j <- cols[1]
 
-      # --- Deletion handling (e.g., A198-) ---
-      if (target_DNA == "-") {
-        # check column, column-1, column+1 to tolerate 1-col jitter
-        called_del <- FALSE
+      ref_at_j  <- ref_chars[j]
+      read_at_j <- target_chars[j]
 
-        check_gap_at <- function(j) {
-          if (j < 1 || j > length(target_chars)) return(FALSE)
-          # ensure mutation spec matches the reference residue at pos
-          if (ref_chars[col_idx] != ref_DNA) return(FALSE)
-          # count deletion if read shows gap at j and ref at j is a real base (not '-')
-          target_chars[j] == "-" && ref_chars[j] != "-"
-        }
-
-        if (check_gap_at(col_idx) ||
-            check_gap_at(col_idx - 1) ||
-            check_gap_at(col_idx + 1)) {
-          score <- score + 1
-          detected_mutations <- c(detected_mutations, paste0(ref_DNA, pos, "-"))
-          called_del <- TRUE
-        }
-
-        # If no deletion called but explicit WT at mapped column, confirm WT
-        if (!called_del && base_read_at_pos == ref_DNA) {
-          wt_confirmed <- wt_confirmed + 1
-        }
+      # sanity: mutation spec must match the reference base at this position
+      if (ref_at_j != ref_DNA) {
+        if (debug) message(sprintf("Spec/ref mismatch at pos %d: spec=%s ref=%s", pos, ref_DNA, ref_at_j))
         next
       }
 
-      # --- Substitutions & WT confirmation ---
-      # Treat gap/unknown in READ as uninformative
-      if (base_read_at_pos %in% c("-", "N")) next
-
-      if (base_read_at_pos == target_DNA) {
-        # Resistance substitution detected
-        score <- score + 1
-        detected_mutations <- c(detected_mutations, paste0(ref_DNA, pos, target_DNA))
-      } else if (base_ref_at_pos == ref_DNA && base_read_at_pos == ref_DNA) {
-        # Explicit WT confirmation
-        wt_confirmed <- wt_confirmed + 1
+      if (target_DNA == "-") {
+        # Deletion: read must have a gap exactly at the reference-mapped column
+        if (read_at_j == "-" && ref_at_j != "-") {
+          score <- score + 1L
+          detected <- c(detected, paste0(ref_DNA, pos, "-"))
+          if (debug) message(sprintf("DEL %s at pos %d (col %d)", paste0(ref_DNA, pos, "-"), pos, j))
+        } else if (informative(read_at_j) && read_at_j == ref_DNA) {
+          wt_confirmed <- wt_confirmed + 1L
+          if (debug) message(sprintf("WT confirm (no deletion) at pos %d", pos))
+        } else if (debug) {
+          message(sprintf("No DEL at pos %d: read(col)=%s", pos, read_at_j))
+        }
+      } else {
+        # Substitution: read base must equal target_DNA at the mapped column
+        if (informative(read_at_j) && read_at_j == target_DNA) {
+          score <- score + 1L
+          detected <- c(detected, paste0(ref_DNA, pos, target_DNA))
+          if (debug) message(sprintf("SUB %s at pos %d (col %d)", paste0(ref_DNA, pos, target_DNA), pos, j))
+        } else if (informative(read_at_j) && read_at_j == ref_DNA) {
+          wt_confirmed <- wt_confirmed + 1L
+          if (debug) message(sprintf("WT confirm at pos %d", pos))
+        } else if (debug) {
+          message(sprintf("No SUB at pos %d: read(col)=%s target=%s", pos, read_at_j, target_DNA))
+        }
       }
-      # else: other mismatch -> ignore under simplified rule
     }
 
-    detected_mutations_str <- if (length(detected_mutations)) paste(detected_mutations, collapse = ", ") else "None"
-
-    # Status rule: Resistant if any; else Wildtype if any WT; else Unknown
     status <- if (score > 0) "Resistant" else if (wt_confirmed > 0) "Wildtype" else "Unknown"
-
-    list(
-      score = score,
-      detected_mutations = detected_mutations_str,
-      wt_confirmed_positions = wt_confirmed,
-      status = status
-    )
+    list(score = score,
+         detected_mutations = if (length(detected)) paste(detected, collapse=", ") else "None",
+         wt_confirmed_positions = wt_confirmed,
+         status = status)
 
   }, error = function(e) {
     warning(paste("Error processing sequences:", e$message))
@@ -174,4 +168,5 @@ process_mutation_data <- function(file_path) {
 }
 
 result <- process_mutation_data("input.tsv")
+warnings()
 print(result)
