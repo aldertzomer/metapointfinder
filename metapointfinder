@@ -260,7 +260,7 @@ cat "$database"/AMR_DNA-mutation_underscore.tsv |cut -f 1 |sort |uniq > dna_acce
 
 #align the reads against proteins
 echo "Aligning reads to proteins using diamond blastx"
-diamond blastx -d "$database"/AMRProt -q "$sample".fastq -o "$sample".prot.hits.txt -F 15 --range-culling -k1 --range-cover 5 --iterate --id 80 --masking 0 --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore full_sseq qseq_translated 1>> "$sample".log 2>> "$sample".error
+diamond blastx -d "$database"/AMRProt -q "$sample".fastq -o "$sample".prot.hits.txt -F 15 --range-culling -k1 --range-cover 5 --iterate --id 70 --masking 0 --outfmt 6 qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore full_sseq qseq_translated 1>> "$sample".log 2>> "$sample".error
 
 # make the input for R
 echo "Parsing diamond output"
