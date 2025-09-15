@@ -34,12 +34,12 @@ else
 fi
 
 # check R dependencies
-R -e "stopifnot(2 == length(find.package(c('msa', 'Biostrings' ))))" --slave
+R -e "stopifnot(2 == length(find.package(c('msa', 'Biostrings', 'pwalign'))))" --slave
 #catch error and kill script
 if [[ $? -eq 0 ]]; then
     echo
 else
-    echo "R package msa and/or Biostrings not installed"
+    echo "R package msa and/or Biostrings and/or pwalign not installed"
     exit 1
 fi
 

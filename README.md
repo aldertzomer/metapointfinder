@@ -20,6 +20,7 @@
 - **R** with libraries:
   - `msa`
   - `Biostrings`
+  = `pwalign`
 
 - **DIAMOND v2.0.15** (this exact version is required)
 - **KMA**
