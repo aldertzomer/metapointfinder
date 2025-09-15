@@ -300,7 +300,7 @@ done | tr " " "\t"  >>$sample.dna.input.tsv
 #run the R script. Too lazy to do argument parsing with R
 echo "Scoring DNA mutations"
 cp $sample.dna.input.tsv input.tsv
-R --vanilla < $scriptlocation/dna_score_mutations.R 1> $sample.log 2>$sample.error
+R --vanilla < $scriptlocation/dna_score_mutations.R 1>> $sample.log 2>>$sample.error
 cp updated_table_with_scores_and_mutations.tsv $sample.dna.updated_table_with_scores_and_mutations.tsv
 rm input.tsv
 rm updated_table_with_scores_and_mutations.tsv
