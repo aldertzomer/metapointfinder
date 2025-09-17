@@ -34,7 +34,7 @@ else
 fi
 
 # check R dependencies
-R -e "stopifnot(2 == length(find.package(c('msa', 'Biostrings', 'pwalign'))))" --slave
+R -e "stopifnot(3 == length(find.package(c('msa', 'Biostrings', 'pwalign'))))" --slave
 #catch error and kill script
 if [[ $? -eq 0 ]]; then
     echo
