@@ -3,16 +3,15 @@
 
 """
 metapointfinder.py
-Reimplementation of the Bash metapointfinder pipeline in Python, preserving
-all quirks of formatting, sorting, and mutation handling.
+Reimplementation of the Bash metapointfinder pipeline in Python
 
 Usage:
   python metapointfinder.py <file.fastq[.gz]> <databasefolder> <outputfolder> [force]
 
 Requirements:
-  - Programs listed in ./dependencies (diamond, kma, wget, R, zcat, cut, sed, grep, tr, sort, uniq, awk, tail, gzip)
-  - R packages: msa, Biostrings, pwalign
-  - DIAMOND 2.0.15 (as in your README requirement)
+  - Programs listed in ./dependencies (diamond, kma, wget, R)
+  - R packages: Biostrings, pwalign
+  - DIAMOND 2.0.15
 
 This script expects to live next to:
   - dependencies
@@ -27,6 +26,37 @@ import shutil
 import gzip
 import subprocess
 from pathlib import Path
+
+#
+# -------- Add helper so class summaries include DB classes even if 0/0/0
+#
+ALL_CLASSES = set()
+
+def collect_all_classes(db_dir: Path):
+    classes = set()
+    # Protein mutation TSV: class typically at column 6
+    prot_mut = Path(db_dir) / "AMRProt-mutation.tsv"
+    if prot_mut.exists():
+        with open(prot_mut, "r", encoding="utf-8") as f:
+            for ln in f:
+                if not ln.strip():
+                    continue
+                parts = ln.rstrip("\n").split("\t")
+                if len(parts) >= 6 and parts[5] and parts[5] != "class":
+                    classes.add(parts[5])
+    # DNA mutation TSV: class typically at column 5
+    dna_mut = Path(db_dir) / "AMR_DNA-mutation.tsv"
+    if dna_mut.exists():
+        with open(dna_mut, "r", encoding="utf-8") as f:
+            for ln in f:
+                if not ln.strip():
+                    continue
+                if "mutation_position" in ln or ("class" in ln and "position" in ln):
+                    continue
+                parts = ln.rstrip("\n").split("\t")
+                if len(parts) >= 5 and parts[4] and parts[4] != "class":
+                    classes.add(parts[4])
+    return classes
 
 # ------------------------
 # Small helpers
@@ -58,7 +88,7 @@ def which_or_die(prog):
 def fasta_to_tsv_two_cols(fa_in: Path, tsv_out: Path):
     """
     Convert FASTA into two-column TSV: accession<TAB>sequence
-    Accession is the header up to first whitespace (matches Bash behavior).
+    Accession is the header up to first whitespace
     """
     acc = None
     seq_parts = []
@@ -78,16 +108,15 @@ def fasta_to_tsv_two_cols(fa_in: Path, tsv_out: Path):
             fout.write(f"{acc}\t{''.join(seq_parts)}\n")
 
 # ------------------------
-# Mutation combiners (Python versions of the Bash loops)
+# Mutation combiners for database - future version swill include predicted similars
 # ------------------------
 
 def parse_amrprot_mutation_underscore_combined(tsv_in):
     """
     Build dict: (class, accession) -> sorted, comma-joined changes_str (low->high).
-    Behavior mirrors the Bash:
       - Use the 'position' column (numeric) from AMRProt-mutation.tsv (cut -f 2,3,4,6)
       - Keep raw token until the END, then map 'del'/'STOP' -> '-'
-      - Do NOT strip '-' from the right side (so '...107-' is preserved)
+      - Do NOT strip '-' from the right side (so '.107-' is preserved)
       - Sort by position ascending
     """
     tmp = {}  # (class, accession) -> list[(pos_int, mutation_raw_string)]
@@ -139,14 +168,11 @@ def parse_amrprot_mutation_underscore_combined(tsv_in):
 
 def build_AMR_DNA_combined(db_dir):
     """
-    Mimic the Bash AMR_DNA combiner exactly:
-      - Replace '/' by '_' in mutation TSV and FASTA headers
-      - Build AMR_DNA_underscore_fa.tsv (accession \t sequence)
-      - For each (class, accession), accumulate mutations, build changes_str
-        (low->high) and only THEN map 'del'/'STOP' to '-'
-      - Do NOT remove '-' from right side so trailing '-' deletions are preserved
-      - Sort output lines by (class, accession)
+    - Always use the 'position in provided sequence' column (parts[3]) as the coordinate
+      when available; otherwise, fall back to digits from parts[1].
+    - Strip trailing '-' from the left token segment (handles promoter-style negatives like G-48T).
     """
+    from pathlib import Path
     dna_mut       = Path(db_dir) / "AMR_DNA-mutation.tsv"
     dna_mut_us    = Path(db_dir) / "AMR_DNA-mutation_underscore.tsv"
     dna_fa        = Path(db_dir) / "AMR_DNA.fa"
@@ -170,7 +196,7 @@ def build_AMR_DNA_combined(db_dir):
             acc_to_seq[acc] = seq
 
     # Read mutation rows
-    rows = []
+    rows = []  # (acc, pos_used:int, mut_token, class)
     with open(dna_mut_us, "r", encoding="utf-8") as f:
         for line in f:
             if not line.strip():
@@ -180,43 +206,50 @@ def build_AMR_DNA_combined(db_dir):
             parts = line.rstrip("\n").split("\t")
             if len(parts) < 5:
                 continue
-            acc  = parts[0]
-            pos  = parts[1]
-            mut  = parts[2]
-            cls  = parts[4]
-            rows.append((acc, pos, mut, cls))
+            acc = parts[0]
+            pos_str = parts[1]
+            mut = parts[2]
+            cls = parts[4]
 
-    classes    = sorted(set(cls for *_, cls in rows if cls != "class"))
-    accessions = sorted(set(acc for acc, *_ in rows))
+            # ALWAYS prefer the override column (position in provided sequence)
+            pos_used = None
+            if len(parts) > 3 and parts[3].strip().isdigit():
+                pos_used = int(parts[3].strip())
+            else:
+                mpos = re.search(r"[0-9]+", pos_str)
+                if not mpos:
+                    continue
+                pos_used = int(mpos.group(0))
+
+            rows.append((acc, pos_used, mut, cls))
+
+    classes    = sorted(set(r[3] for r in rows))
+    accessions = sorted(set(r[0] for r in rows))
 
     by_cls_acc = {}
     for cls in classes:
         for acc in accessions:
             muts = []
-            for (acc_i, pos, mut, cls_i) in rows:
+            for (acc_i, pos_used, mut, cls_i) in rows:
                 if acc_i != acc or cls_i != cls:
                     continue
 
                 mutation_cleaned = mut.split("_", 1)[1] if "_" in mut else mut
 
-                mpos = re.search(r"[0-9]+", pos)
-                if not mpos:
-                    continue
-                pos_int = int(mpos.group(0))
-
+                # Split token and strip trailing '-' from left part (promoter negative marker),
+                # but keep '-' on the right (true deletion marker).
                 pieces = re.split(r"([0-9]+)", mutation_cleaned, maxsplit=1)
                 if len(pieces) < 3:
                     continue
-                baseleft  = pieces[0]
-                baseright = pieces[2]  # keep any '-'
+                baseleft  = pieces[0].rstrip('-')
+                baseright = pieces[2]
 
-                mutation_raw = f"{baseleft}{pos_int}{baseright}"
-                muts.append((pos_int, mutation_raw))
+                mutation_raw = f"{baseleft}{pos_used}{baseright}"
+                muts.append((pos_used, mutation_raw))
 
             if muts:
                 muts.sort(key=lambda x: x[0])
                 changes_str = ",".join(m for _, m in muts)
-                # Only now map del/STOP
                 changes_str = changes_str.replace("del", "-").replace("STOP", "-")
                 seq = acc_to_seq.get(acc, "")
                 by_cls_acc[(cls, acc)] = (seq, changes_str)
@@ -227,8 +260,9 @@ def build_AMR_DNA_combined(db_dir):
             seq, changes = by_cls_acc[(cls, acc)]
             out.write(f"{cls}\t{acc}\t{seq}\t{changes}\n")
 
+
 # ------------------------
-# Summaries (Python version of the Bash counts)
+# Summaries
 # ------------------------
 
 def tsv_read(path):
@@ -251,7 +285,9 @@ def write_class_and_gene_summaries(sample_prefix, out_dir: Path, is_prot=True):
     header, rows = tsv_read(infile)
 
     # columns: class, gene, Status
-    classes = sorted(set(r["class"] for r in rows if r.get("class") and r["class"] != "class"))
+    row_classes = sorted(set(r["class"] for r in rows if r.get("class") and r["class"] != "class"))
+    # include DB classes as well (print zero rows too)
+    classes = sorted(set(row_classes) | set(ALL_CLASSES))
     genes   = sorted(set(r["gene"]  for r in rows if r.get("gene")  and r["gene"]  != "gene" ))
 
     # class summary
@@ -282,22 +318,38 @@ def write_class_and_gene_summaries(sample_prefix, out_dir: Path, is_prot=True):
 # ------------------------
 
 def main():
-    print("This is metapointfinder v0.2")
+    print("This is metapointfinder v0.3")
     print("This tool finds substitions in translated reads matching to relevant proteins and mutations in reads matching to relevant genes")
     print("Relevant proteins and genes are obtained from the AMRFinder database")
+    #
+    # CLI flags shim: support --input/--db/--output [--force] while preserving positional form
+    #
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--input", "-i")
+    parser.add_argument("--db", "-d")
+    parser.add_argument("--output", "-o")
+    parser.add_argument("--force", action="store_true")
+    parser.add_argument("rest", nargs="*")
+    args = parser.parse_args()
 
-    if len(sys.argv) < 4:
-        print("usage: metapointfinder.py file.fastq[.gz] databasefolder outputfolder [force]")
-        sys.exit(1)
+    if args.input and args.db and args.output:
+        input_path  = Path(args.input).resolve()
+        database    = Path(args.db)
+        output      = Path(args.output)
+        force_flag  = "force" if args.force else None
+    else:
+        if len(args.rest) < 3:
+            print("usage: metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder [--force]")
+            print("   or: metapointfinder.py file.fastq[.gz] databasefolder outputfolder [force]")
+            sys.exit(1)
+        input_path  = Path(args.rest[0]).resolve()
+        database    = Path(args.rest[1])
+        output      = Path(args.rest[2])
+        force_flag  = "force" if (len(args.rest) > 3 and args.rest[3] == "force") else None
 
     script_path = Path(__file__).resolve()
     script_dir  = script_path.parent
-
-    input_path  = Path(sys.argv[1]).resolve()
-    database    = Path(sys.argv[2])
-    output      = Path(sys.argv[3])
-    force_flag  = sys.argv[4] if len(sys.argv) > 4 else None
-
     fastqfile = input_path.name
 
     # ------------------------
@@ -308,7 +360,7 @@ def main():
         print("Missing 'dependencies' file next to the script.")
         sys.exit(1)
 
-    # Check each dependency (like Bash)
+    # Check each dependency
     with open(deps_file, "r", encoding="utf-8") as f:
         for program in [ln.strip() for ln in f if ln.strip()]:
             if shutil.which(program) is None:
@@ -317,7 +369,7 @@ def main():
 
     # R packages
     try:
-        sh('R -e "stopifnot(3 == length(find.package(c(\'msa\', \'Biostrings\', \'pwalign\'))))" --slave')
+        sh('R -e "stopifnot(2 == length(find.package(c(\'Biostrings\', \'pwalign\'))))" --slave')
     except subprocess.CalledProcessError:
         print("R package msa and/or Biostrings and/or pwalign not installed")
         sys.exit(1)
@@ -366,33 +418,24 @@ def main():
     # Database prep
     # ------------------------
     os.chdir(database)
-
-    # AMRProt
     if not exists("AMRProt.fa"):
-        print("downloading https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt.fa")
-        sh("wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt.fa 1>> databaseprep.log 2>> databaseprep.error")
-
-    if not exists("AMRProt-mutation.tsv"):
-        print("downloading https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt-mutation.tsv")
-        sh("wget -nv -c https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt-mutation.tsv 1>> databaseprep.log 2>> databaseprep.error")
-
-    # Prepare AMRProt-mutation_underscore.tsv (slashes -> underscores)
+        print("downloading protein mutation sequences")
+        base = "https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest"
+        sh(f"wget -nv -c {base}/AMRProt-mutation.tsv 1>> databaseprep.log 2>> databaseprep.error")
+        sh(f"wget -nv -c {base}/AMRProt.fa 1>> databaseprep.log 2>> databaseprep.error")
     if not exists("AMRProt-mutation_underscore.tsv"):
-        s = read_text("AMRProt-mutation.tsv").replace("/", "_")
-        write_text("AMRProt-mutation_underscore.tsv", s)
+        write_text("AMRProt-mutation_underscore.tsv", read_text("AMRProt-mutation.tsv").replace("/", "_"))
 
-    # Combined AMRProt mutations (Python replicant of the Bash loop)
+    # Combined protein changes
     if not exists("AMRProt-mutation_underscore_combined.tsv"):
         print("Prepping AMRProt mutation database")
-        combined_map = parse_amrprot_mutation_underscore_combined("AMRProt-mutation.tsv")
-        # write sorted by (class, accession)
+        combined = parse_amrprot_mutation_underscore_combined("AMRProt-mutation_underscore.tsv")
         with open("AMRProt-mutation_underscore_combined.tsv", "w", encoding="utf-8") as out:
-            for (cls, acc) in sorted(combined_map.keys(), key=lambda t: (t[0], t[1])):
-                out.write(f"{cls}\t{acc}\t{combined_map[(cls, acc)]}\n")
+            for (cls, acc), changes in sorted(combined.items(), key=lambda t: (t[0][0], t[0][1])):
+                out.write(f"{cls}\t{acc}\t{changes}\n")
 
     # Build AMRProt_mutation.fa (only headers containing "mutation")
     if not exists("AMRProt_mutation.fa"):
-        # Equivalent of: cat AMRProt.fa |tr "\n" "\t" |tr ">" "\n" |grep mutation |sed 's/^/>/'|tr "\t" "\n"
         lines = []
         with open("AMRProt.fa", "r", encoding="utf-8") as f:
             buf = f.read()
@@ -403,36 +446,10 @@ def main():
                 lines.append(">" + rec)
         write_text("AMRProt_mutation.fa", "".join(lines))
 
-    # Build diamond DB
+    # DIAMOND DB (only if missing)
     if not exists("AMRProt.dmnd"):
-        print("Building AMRProt diamond database")
-        sh("diamond makedb --in AMRProt_mutation.fa --db AMRProt 1>> databaseprep.log 2>> databaseprep.error")
-
-    # DNA databases
-    if not exists("AMR_DNA.fa"):
-        print("downloading DNA fasta databases")
-        base = "https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest"
-        dna_fas = [
-            "AMR_DNA-Acinetobacter_baumannii.fa",
-            "AMR_DNA-Campylobacter.fa",
-            "AMR_DNA-Clostridioides_difficile.fa",
-            "AMR_DNA-Enterococcus_faecalis.fa",
-            "AMR_DNA-Enterococcus_faecium.fa",
-            "AMR_DNA-Escherichia.fa",
-            "AMR_DNA-Klebsiella_oxytoca.fa",
-            "AMR_DNA-Klebsiella_pneumoniae.fa",
-            "AMR_DNA-Neisseria_gonorrhoeae.fa",
-            "AMR_DNA-Salmonella.fa",
-            "AMR_DNA-Staphylococcus_aureus.fa",
-            "AMR_DNA-Streptococcus_pneumoniae.fa",
-        ]
-        for fna in dna_fas:
-            sh(f"wget -nv -c {base}/{fna} 1>> databaseprep.log 2>> databaseprep.error")
-        # concat
-        with open("AMR_DNA.fa", "wb") as fout:
-            for fna in dna_fas:
-                with open(fna, "rb") as fin:
-                    shutil.copyfileobj(fin, fout)
+        print("Building DIAMOND database for AMRProt_mutation.fa")
+        sh("diamond makedb --in AMRProt_mutation.fa -d AMRProt 1>> databaseprep.log 2>> databaseprep.error")
 
     if not exists("AMR_DNA-mutation.tsv"):
         print("downloading AMR_DNA-*.tsv")
@@ -451,8 +468,24 @@ def main():
             "AMR_DNA-Staphylococcus_aureus.tsv",
             "AMR_DNA-Streptococcus_pneumoniae.tsv",
         ]
+        dna_fas = [
+            "AMR_DNA-Acinetobacter_baumannii.fa",
+            "AMR_DNA-Campylobacter.fa",
+            "AMR_DNA-Clostridioides_difficile.fa",
+            "AMR_DNA-Enterococcus_faecalis.fa",
+            "AMR_DNA-Enterococcus_faecium.fa",
+            "AMR_DNA-Escherichia.fa",
+            "AMR_DNA-Klebsiella_oxytoca.fa",
+            "AMR_DNA-Klebsiella_pneumoniae.fa",
+            "AMR_DNA-Neisseria_gonorrhoeae.fa",
+            "AMR_DNA-Salmonella.fa",
+            "AMR_DNA-Staphylococcus_aureus.fa",
+            "AMR_DNA-Streptococcus_pneumoniae.fa",
+        ]
         for tsv in dna_tsvs:
             sh(f"wget -nv -c {base}/{tsv} 1>> databaseprep.log 2>> databaseprep.error")
+        for fa in dna_fas:
+            sh(f"wget -nv -c {base}/{fa} 1>> databaseprep.log 2>> databaseprep.error")
         # cat and drop header lines with 'mutation_position'
         with open("AMR_DNA-mutation.tsv", "w", encoding="utf-8") as out:
             for tsv in dna_tsvs:
@@ -461,8 +494,14 @@ def main():
                         if "mutation_position" in ln:
                             continue
                         out.write(ln)
+        # cat fas lines
+        with open("AMR_DNA.fa", "w", encoding="utf-8") as out:
+            for fa in dna_fas:
+                with open(fa, "r", encoding="utf-8") as fin:
+                    for ln in fin:
+                        out.write(ln)
 
-    # Build AMR_DNA_underscore_combined.tsv (Python exact replica of Bash loop)
+    # Build AMR_DNA_underscore_combined.tsv
     if not exists("AMR_DNA_underscore_combined.tsv"):
         print("Prepping AMR_DNA mutation database")
         build_AMR_DNA_combined(database)
@@ -472,6 +511,12 @@ def main():
         print("Building AMR_DNA KMA database")
         sh("kma index -i AMR_DNA_underscore.fa -o AMR_DNA_underscore 1>> databaseprep.log 2>> databaseprep.error")
 
+    # Populate the global class set so summaries include empty classes
+    global ALL_CLASSES
+    ALL_CLASSES = collect_all_classes(database)
+
+
+
     # ------------------------
     # Alignments
     # ------------------------
@@ -479,12 +524,36 @@ def main():
     sample_fastq = output / f"{sample}.fastq"
 
     # Prepare some initial files (class/accession lists)
-    # This mirrors the Bash cuts; we’ll reuse only where needed for summaries later
-    sh(f"cat {database}/AMRProt-mutation_underscore.tsv |cut -f 6 |sort |uniq |grep -v class > class")
-    sh(f"cat {database}/AMRProt-mutation_underscore.tsv |cut -f 2 |sort |uniq > accession")
-    sh(f"cat {database}/AMR_DNA-mutation_underscore.tsv |cut -f 5 |sort |uniq |grep -v class > dna_class")
-    sh(f"cat {database}/AMR_DNA-mutation_underscore.tsv |cut -f 1 |sort |uniq > dna_accession")
-
+    print("Preparing initial class/accession files")
+    
+    # AMRProt classes (col 6) excluding header "class"
+    with open(f"{database}/AMRProt-mutation_underscore.tsv", encoding="utf-8") as f:
+        classes = {line.rstrip("\n").split("\t")[5] for line in f if not line.startswith("class")}
+    with open("class", "w", encoding="utf-8") as fout:
+        for c in sorted(classes):
+            fout.write(c + "\n")
+    
+    # AMRProt accessions (col 2)
+    with open(f"{database}/AMRProt-mutation_underscore.tsv", encoding="utf-8") as f:
+        accs = {line.rstrip("\n").split("\t")[1] for line in f if line.strip()}
+    with open("accession", "w", encoding="utf-8") as fout:
+        for a in sorted(accs):
+            fout.write(a + "\n")
+    
+    # AMR_DNA classes (col 5) excluding header "class"
+    with open(f"{database}/AMR_DNA-mutation_underscore.tsv", encoding="utf-8") as f:
+        dclasses = {line.rstrip("\n").split("\t")[4] for line in f if not line.startswith("class")}
+    with open("dna_class", "w", encoding="utf-8") as fout:
+        for dc in sorted(dclasses):
+            fout.write(dc + "\n")
+    
+    # AMR_DNA accessions (col 1)
+    with open(f"{database}/AMR_DNA-mutation_underscore.tsv", encoding="utf-8") as f:
+        daccs = {line.rstrip("\n").split("\t")[0] for line in f if line.strip()}
+    with open("dna_accession", "w", encoding="utf-8") as fout:
+        for da in sorted(daccs):
+            fout.write(da + "\n")
+            
     # DIAMOND
     print("Aligning reads to proteins using diamond blastx")
     sh(
@@ -495,18 +564,45 @@ def main():
         f"1>> {sample}.log 2>> {sample}.error"
     )
 
-    # Build protein input (REPLICATE the exact shell pipeline to preserve field handling)
+    # Build protein input (exact accession match via dict)
     print("Parsing diamond output")
-    with open(f"{sample}.prot.input.tsv", "w", encoding="utf-8") as fout:
+
+    out_path = f"{sample}.prot.input.tsv"
+    with open(out_path, "w", encoding="utf-8") as fout:
         fout.write("class\tgene\tread\treference\ttarget\tchanges_str\n")
-    sh(
-        f"""cat {sample}.prot.hits.txt |cut -f 1,2,13,14 |sed "s/|/\\t/g" |cut -f 1,3,12,13,14 | \
-while read id accession gene reference target ; do \
-  cat {database}/AMRProt-mutation_underscore_combined.tsv |grep $accession |while read class accession changes ; do \
-    echo $class $gene $id $reference $target $changes ; \
-  done ; \
-done | tr " " "\\t" >> {sample}.prot.input.tsv"""
-    )
+
+    # Index AMRProt combined: accession -> list[(class, changes)]
+    amr_map = {}
+    with open(f"{database}/AMRProt-mutation_underscore_combined.tsv", encoding="utf-8") as f:
+        for line in f:
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) >= 3:
+                cls, acc, chg = parts[0], parts[1], parts[2]
+                amr_map.setdefault(acc, []).append((cls, chg))
+
+    def pick_fields_from_hit(line: str):
+        # Get the right columns
+        cols = line.rstrip("\n").split("\t")
+        tmp = [(cols[i] if i < len(cols) else "") for i in (0, 1, 12, 13)]
+        expanded = "\t".join(tmp).replace("|", "\t").split("\t")
+        if len(expanded) < 14:
+            expanded += [""] * (14 - len(expanded))
+        _id        = expanded[0]
+        _accession = expanded[2]
+        _gene      = expanded[11]
+        _reference = expanded[12]
+        _target    = expanded[13]
+        return _id, _accession, _gene, _reference, _target
+
+    with open(f"{sample}.prot.hits.txt", encoding="utf-8") as fh, open(out_path, "a", encoding="utf-8") as fout:
+        for line in fh:
+            _id, _acc, _gene, _ref, _tgt = pick_fields_from_hit(line)
+            if not _acc:
+                continue
+            for cls, chg in amr_map.get(_acc, []):
+                fout.write("\t".join([cls, _gene, _id, _ref, _tgt, chg]) + "\n")
+
+
 
     # Score proteins (R)
     print("Scoring amino acid substitutions")
@@ -519,24 +615,49 @@ done | tr " " "\\t" >> {sample}.prot.input.tsv"""
     # KMA
     print("Aligning reads to genes using kma")
     sh(
-        f'kma -t -bcNano -hmm -ont -t_db {database}/AMR_DNA_underscore -i {sample_fastq} '
+        f'kma -bcNano -hmm -ont -t_db {database}/AMR_DNA_underscore -i {sample_fastq} '
         f'-o {sample} -t 16 -nc -na -1t1 1>> {sample}.log 2>> {sample}.error'
     )
     # delete temp fastq
     os.remove(sample_fastq)
 
-    # DNA input (replicate Bash pipeline on frag.gz)
+    # DNA input 
+    
     print("Parsing KMA output")
-    with open(f"{sample}.dna.input.tsv", "w", encoding="utf-8") as fout:
+    out_path = f"{sample}.dna.input.tsv"
+    with open(out_path, "w", encoding="utf-8") as fout:
         fout.write("class\tgene\tread\treference\ttarget\tchanges_str\n")
-    sh(
-        f"""zcat {sample}.frag.gz |cut -f 1,6,7 |cut -f 1 -d " " | \
-while read target accession read ; do \
-  cat {database}/AMR_DNA_underscore_combined.tsv |grep $accession |while read class accession reference changes; do \
-    echo $class $accession $read $reference $target $changes ; \
-  done ; \
-done | tr " " "\\t" >> {sample}.dna.input.tsv"""
-    )
+    
+    # Index AMR_DNA combined table: accession -> list[(class, reference, changes)]
+    dna_map = {}
+    with open(f"{database}/AMR_DNA_underscore_combined.tsv", encoding="utf-8") as fdb:
+        for line in fdb:
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) >= 4:
+                cls, acc, ref, chg = parts[0], parts[1], parts[2], parts[3]
+                dna_map.setdefault(acc, []).append((cls, ref, chg))
+    
+    # Read KMA fragments (.frag.gz)
+    # take columns 1,6,7 (0-based: 0,5,6); trim the read at first space.
+    with gzip.open(f"{sample}.frag.gz", "rt", encoding="utf-8") as ffrag, open(out_path, "a", encoding="utf-8") as fout:
+        for line in ffrag:
+            cols = line.rstrip("\n").split("\t")
+            # Ensure we have at least 7 columns
+            if len(cols) < 7:
+                continue
+            target = cols[0]
+            accession = cols[5]
+            read_id = cols[6].split(" ")[0]  # trim at first space
+    
+            if not accession:
+                continue
+    
+            for cls, ref, chg in dna_map.get(accession, []):
+                # NOTE: "gene" column for DNA is the accession
+                fout.write("\t".join([cls, accession, read_id, ref, target, chg]) + "\n")
+    
+
+
 
     # Score DNA (R)
     print("Scoring DNA mutations")
@@ -578,7 +699,6 @@ done | tr " " "\\t" >> {sample}.dna.input.tsv"""
         sys.exit(0)
     else:
         print("DNA summary output not generated. Something went wrong")
-
 
 if __name__ == "__main__":
     main()

@@ -18,7 +18,6 @@
 ### Dependencies
 
 - **R** with libraries:
-  - `msa`
   - `Biostrings`
   - `pwalign`
 
@@ -26,7 +25,6 @@
 - **DIAMOND v2.0.15** (this exact version is required)
 - **KMA**
 - **wget**
-- Standard Unix utilities (`awk`, `sed`, `cut`, etc.)
 
 R packages can be installed with:
 
@@ -46,7 +44,6 @@ https://bitbucket.org/genomicepidemiology/kma
 ```bash
 git clone https://github.com/aldertzomer/metapointfinder.git
 cd metapointfinder
-chmod +x metapointfinder
 ```
 
 ---
@@ -54,22 +51,18 @@ chmod +x metapointfinder
 ## Usage
 
 ```bash
-./metapointfinder input.fastq database_folder output_folder
-```
-
-OR for gzipped input:
-
-```bash
-./metapointfinder input.fastq.gz database_folder output_folder
+python metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder [--force]
 ```
 
 ### Arguments
 
-- `input.fastq` or `input.fastq.gz`: sequence read data file. Currently paired read data is not used.
-- `database_folder`: Directory where AMRFinder databases will be downloaded/prepared.
+- `file.fastq` or `file.fastq.gz`: sequence read data file. Currently paired read data information is not used.
+- `databasefolder`: Directory where AMRFinder databases will be downloaded/prepared.
 - `output_folder`: Directory to store all results.
+- `--force`: write in same directory and overwrite results. Use with care. Never use in parallel with different input files.
 
-> If `database_folder` does not exist, it will be created automatically and the required AMRFinder databases will be downloaded and processed.
+
+> If `databasefolder` does not exist, it will be created automatically and the required AMRFinder databases will be downloaded and processed.
 
 ---
 
@@ -86,7 +79,7 @@ OR for gzipped input:
    - Matching regions extracted and scored using the provided R scripts.
 
 3. **Mutation Scoring (in R):**
-   - Translated protein reads and DNA reads are aligned to references using ClustalW (via the `msa` R package).
+   - Translated protein reads and DNA reads are aligned to references using ClustalW (via the `pwalign` R package).
    - Known mutations from AMRFinder mutation tables are searched for.
    - Each read is scored:
      - **MutationScore:** Number of known resistance mutations detected.

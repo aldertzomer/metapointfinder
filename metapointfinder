@@ -1,6 +1,6 @@
 #!/bin/bash
 # run as ./metapointfinder file.fastq databasefolder outputfolder
-echo "This is metapointfinder v0.2"
+echo "This is metapointfinder v0.2 - early implementation in bash to test if it could actually work - has some very minor bugs"
 echo "This tool finds substitions in translated reads matching to relevant proteins and mutations in reads matching to relevant genes"
 echo "Relevant proteins and genes are obtained from the AMRFinder database"
 
