@@ -2,7 +2,7 @@
 # copy the files in this folder to the metapointfinderdb folder and run it from there
 
 # set location of tool and db
-tool=/mnt/data/tools/metapointfinder/metapointfinder/metapointfinder
+tool=/mnt/data/tools/metapointfinder/metapointfinder/metapointfinder.py
 db=/mnt/data/db/metapointfinderdb
 
 #make output folder
@@ -41,10 +41,10 @@ done |parallel -j 64 >/dev/null
 #for cut in Eacica Eagrtu Ebacsu Ebraja Ecaucr Echltr Echlre Ecloab Eerwct Eecoli Ebacst Ehaein Ehalsa Eklepn Elacdl Emyctu Eneigo Epseae Erhile Erhosh Esalty Eserma Erhime Estaau Estrpn Estrco Esynco Etheth Evibch Eyeren  ; do
 for cut in Eecoli ; do
     for r in 0.00 0.01 0.02 0.03 0.05 0.1 0.2 0.3; do
-	echo "$tool benchmark/$cut.100.$r.fastq $db benchmark/mpf.$cut.100.$r"
-	echo "$tool benchmark/$cut.200.$r.fastq $db benchmark/mpf.$cut.200.$r"
-	echo "$tool benchmark/$cut.1000.$r.fastq $db benchmark/mpf.$cut.1000.$r"
-	echo "$tool benchmark/$cut.5000.$r.fastq $db benchmark/mpf.$cut.5000.$r"
+	echo "python $tool benchmark/$cut.100.$r.fastq $db benchmark/mpf.$cut.100.$r"
+	echo "python $tool benchmark/$cut.200.$r.fastq $db benchmark/mpf.$cut.200.$r"
+	echo "python $tool benchmark/$cut.1000.$r.fastq $db benchmark/mpf.$cut.1000.$r"
+	echo "python $tool benchmark/$cut.5000.$r.fastq $db benchmark/mpf.$cut.5000.$r"
     done
 done |parallel -j 64
 
