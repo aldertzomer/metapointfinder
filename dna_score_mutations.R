@@ -36,7 +36,7 @@ calculate_mutation_score <- function(reference, target, changes_str, debug = FAL
     target    <- toupper(gsub("[- \r\n\t]", "", target))
 
     # Align: force full reference (pattern) to align; read (subject) can overhang
-    submat <- nucleotideSubstitutionMatrix(match = 2, mismatch = -5, baseOnly = TRUE)
+    submat <- nucleotideSubstitutionMatrix(match = 2, mismatch = -5, baseOnly = FALSE)
     pa <- pairwiseAlignment(
       pattern = DNAString(reference),
       subject = DNAString(target),
