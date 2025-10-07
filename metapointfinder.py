@@ -6,7 +6,7 @@ metapointfinder.py
 Reimplementation of the Bash metapointfinder pipeline in Python
 
 Usage:
-  python metapointfinder.py <file.fastq[.gz]> <databasefolder> <outputfolder> [force]
+  python metapointfinder.py <file.fastq[.gz]> <databasefolder> <outputfolder> [force] <id, default=90>
 
 Requirements:
   - Programs listed in ./dependencies (diamond, kma, wget, R)
@@ -329,23 +329,29 @@ def main():
     parser.add_argument("--input", "-i")
     parser.add_argument("--db", "-d")
     parser.add_argument("--output", "-o")
+    parser.add_argument("--identity", "-id")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("rest", nargs="*")
     args = parser.parse_args()
+
+    if args.identity is None:
+     args.identity = 90  # default identity threshold (1–100 scale)
 
     if args.input and args.db and args.output:
         input_path  = Path(args.input).resolve()
         database    = Path(args.db)
         output      = Path(args.output)
+        identity    = args.identity
         force_flag  = "force" if args.force else None
     else:
-        if len(args.rest) < 3:
-            print("usage: metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder [--force]")
-            print("   or: metapointfinder.py file.fastq[.gz] databasefolder outputfolder [force]")
+        if len(args.rest) < 4:
+            print("usage: metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder --identity 90 [--force]")
+            print("   or: metapointfinder.py file.fastq[.gz] databasefolder outputfolder identity [force]")
             sys.exit(1)
         input_path  = Path(args.rest[0]).resolve()
         database    = Path(args.rest[1])
         output      = Path(args.rest[2])
+        identity    = Path(args.rest[3])
         force_flag  = "force" if (len(args.rest) > 3 and args.rest[3] == "force") else None
 
     script_path = Path(__file__).resolve()
@@ -559,7 +565,7 @@ def main():
     sh(
         f"diamond blastx -d {database}/AMRProt -q {sample_fastq} "
         f"-o {sample}.prot.hits.txt -F 15 --range-culling -k1 --range-cover 5 --iterate "
-        f"--id 70 --masking 0 --outfmt 6 "
+        f"--id {identity} --masking 0 --outfmt 6 "
         f"qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore full_sseq qseq_translated "
         f"1>> {sample}.log 2>> {sample}.error"
     )
@@ -614,9 +620,10 @@ def main():
 
     # KMA
     print("Aligning reads to genes using kma")
+    identityfloat = float(identity) / 100
     sh(
         f'kma -bcNano -hmm -ont -t_db {database}/AMR_DNA_underscore -i {sample_fastq} '
-        f'-o {sample} -t 16 -nc -na -1t1 1>> {sample}.log 2>> {sample}.error'
+        f'-o {sample} -t 16 -nc -na -1t1 -mrs {identityfloat} 1>> {sample}.log 2>> {sample}.error'
     )
     # delete temp fastq
     os.remove(sample_fastq)
