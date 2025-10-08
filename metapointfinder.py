@@ -6,11 +6,11 @@ metapointfinder.py
 Reimplementation of the Bash metapointfinder pipeline in Python
 
 Usage:
-  python metapointfinder.py <file.fastq[.gz]> <databasefolder> <outputfolder> [force] <id, default=90>
+  python metapointfinder.py --input <file.fastq[.gz]> --db <databasefolder> --output <outputfolder> --id 85 --threads 4 [--force]
 
 Requirements:
   - Programs listed in ./dependencies (diamond, kma, wget, R)
-  - R packages: Biostrings, pwalign
+  - R packages: Biostrings, pwalign, parallel
   - DIAMOND 2.0.15
 
 This script expects to live next to:
@@ -108,13 +108,13 @@ def fasta_to_tsv_two_cols(fa_in: Path, tsv_out: Path):
             fout.write(f"{acc}\t{''.join(seq_parts)}\n")
 
 # ------------------------
-# Mutation combiners for database - future version swill include predicted similars
+# Mutation combiners for database - future versions will include predicted similars based on structural similarities (e.g. S83I looks a lot like S83L in GyrA and should be included as Resistant marker)
 # ------------------------
 
 def parse_amrprot_mutation_underscore_combined(tsv_in):
     """
     Build dict: (class, accession) -> sorted, comma-joined changes_str (low->high).
-      - Use the 'position' column (numeric) from AMRProt-mutation.tsv (cut -f 2,3,4,6)
+      - Use the 'position' column (numeric) from AMRProt-mutation.tsv (field 2,3,4,6)
       - Keep raw token until the END, then map 'del'/'STOP' -> '-'
       - Do NOT strip '-' from the right side (so '.107-' is preserved)
       - Sort by position ascending
@@ -330,29 +330,35 @@ def main():
     parser.add_argument("--db", "-d")
     parser.add_argument("--output", "-o")
     parser.add_argument("--identity", "-id")
+    parser.add_argument("--threads", "-t")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("rest", nargs="*")
     args = parser.parse_args()
 
     if args.identity is None:
-     args.identity = 90  # default identity threshold (1–100 scale)
+     args.identity = 85  # default identity threshold (1–100 scale)
+
+    if args.threads is None:
+     args.threads = 4  # default number of threads
+
 
     if args.input and args.db and args.output:
         input_path  = Path(args.input).resolve()
         database    = Path(args.db)
         output      = Path(args.output)
         identity    = args.identity
+        threads     = args.threads
         force_flag  = "force" if args.force else None
     else:
         if len(args.rest) < 4:
-            print("usage: metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder --identity 90 [--force]")
-            print("   or: metapointfinder.py file.fastq[.gz] databasefolder outputfolder identity [force]")
+            print("usage: metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder --identity 85 --threads 4 [--force]")
+#            print("   or: metapointfinder.py file.fastq[.gz] databasefolder outputfolder identity [force]")
             sys.exit(1)
-        input_path  = Path(args.rest[0]).resolve()
-        database    = Path(args.rest[1])
-        output      = Path(args.rest[2])
-        identity    = Path(args.rest[3])
-        force_flag  = "force" if (len(args.rest) > 3 and args.rest[3] == "force") else None
+#        input_path  = Path(args.rest[0]).resolve()
+#        database    = Path(args.rest[1])
+#        output      = Path(args.rest[2])
+#        identity    = Path(args.rest[3])
+#        force_flag  = "force" if (len(args.rest) > 3 and args.rest[3] == "force") else None
 
     script_path = Path(__file__).resolve()
     script_dir  = script_path.parent
@@ -375,9 +381,9 @@ def main():
 
     # R packages
     try:
-        sh('R -e "stopifnot(2 == length(find.package(c(\'Biostrings\', \'pwalign\'))))" --slave')
+        sh('R -e "stopifnot(3 == length(find.package(c(\'parallel\',\'Biostrings\', \'pwalign\'))))" --slave')
     except subprocess.CalledProcessError:
-        print("R package msa and/or Biostrings and/or pwalign not installed")
+        print("R package parallel and/or Biostrings and/or pwalign not installed")
         sys.exit(1)
 
     # Input checks
@@ -563,7 +569,7 @@ def main():
     # DIAMOND
     print("Aligning reads to proteins using diamond blastx")
     sh(
-        f"diamond blastx -d {database}/AMRProt -q {sample_fastq} "
+        f"diamond blastx --threads {threads} -d {database}/AMRProt -q {sample_fastq} "
         f"-o {sample}.prot.hits.txt -F 15 --range-culling -k1 --range-cover 5 --iterate "
         f"--id {identity} --masking 0 --outfmt 6 "
         f"qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore full_sseq qseq_translated "
@@ -612,10 +618,11 @@ def main():
 
     # Score proteins (R)
     print("Scoring amino acid substitutions")
-    shutil.copyfile(f"{sample}.prot.input.tsv", "input.tsv")
-    sh(f'R --vanilla < "{script_dir}/prot_score_mutations.R" 1>> {sample}.log 2>> {sample}.error')
+    #shutil.copyfile(f"{sample}.prot.input.tsv", "input.tsv")
+    #sh(f'R --vanilla < "{script_dir}/prot_score_mutations.R" 1>> {sample}.log 2>> {sample}.error')
+    sh(f'Rscript "{script_dir}/prot_score_mutations.R" "{sample}.prot.input.tsv" {threads} 1>> {sample}.log 2>> {sample}.error')
     shutil.copyfile("updated_table_with_scores_and_mutations.tsv", f"{sample}.prot.updated_table_with_scores_and_mutations.tsv")
-    os.remove("input.tsv")
+    #os.remove("input.tsv")
     os.remove("updated_table_with_scores_and_mutations.tsv")
 
     # KMA
@@ -623,7 +630,7 @@ def main():
     identityfloat = float(identity) / 100
     sh(
         f'kma -bcNano -hmm -ont -t_db {database}/AMR_DNA_underscore -i {sample_fastq} '
-        f'-o {sample} -t 16 -nc -na -1t1 -mrs {identityfloat} 1>> {sample}.log 2>> {sample}.error'
+        f'-o {sample} -t {threads} -nc -na -1t1 -mrs {identityfloat} 1>> {sample}.log 2>> {sample}.error'
     )
     # delete temp fastq
     os.remove(sample_fastq)
@@ -668,10 +675,10 @@ def main():
 
     # Score DNA (R)
     print("Scoring DNA mutations")
-    shutil.copyfile(f"{sample}.dna.input.tsv", "input.tsv")
-    sh(f'R --vanilla < "{script_dir}/dna_score_mutations.R" 1>> {sample}.log 2>> {sample}.error')
+    #shutil.copyfile(f"{sample}.dna.input.tsv", "input.tsv")
+    #sh(f'R --vanilla < "{script_dir}/dna_score_mutations.R" 1>> {sample}.log 2>> {sample}.error')
+    sh(f'Rscript "{script_dir}/dna_score_mutations.R" "{sample}.dna.input.tsv" {threads} 1>> {sample}.log 2>> {sample}.error')
     shutil.copyfile("updated_table_with_scores_and_mutations.tsv", f"{sample}.dna.updated_table_with_scores_and_mutations.tsv")
-    os.remove("input.tsv")
     os.remove("updated_table_with_scores_and_mutations.tsv")
 
     # ------------------------

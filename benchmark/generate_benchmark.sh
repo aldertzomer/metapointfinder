@@ -41,10 +41,10 @@ done |parallel -j 64 >/dev/null
 #for cut in Eacica Eagrtu Ebacsu Ebraja Ecaucr Echltr Echlre Ecloab Eerwct Eecoli Ebacst Ehaein Ehalsa Eklepn Elacdl Emyctu Eneigo Epseae Erhile Erhosh Esalty Eserma Erhime Estaau Estrpn Estrco Esynco Etheth Evibch Eyeren  ; do
 for cut in Eecoli ; do
     for r in 0.00 0.01 0.02 0.03 0.05 0.1 0.2 0.3; do
-	echo "python $tool --input benchmark/$cut.100.$r.fastq --db $db --output benchmark/mpf.$cut.100.$r --identity 70"
-	echo "python $tool --input benchmark/$cut.200.$r.fastq --db $db --output benchmark/mpf.$cut.200.$r --identity 70"
-	echo "python $tool --input benchmark/$cut.1000.$r.fastq --db $db --output benchmark/mpf.$cut.1000.$r --identity 70"
-	echo "python $tool --input benchmark/$cut.5000.$r.fastq --db $db --output benchmark/mpf.$cut.5000.$r --identity 70"
+	echo "python $tool --input benchmark/$cut.100.$r.fastq --db $db --output benchmark/mpf.$cut.100.$r --identity 70 --threads 2 "
+	echo "python $tool --input benchmark/$cut.200.$r.fastq --db $db --output benchmark/mpf.$cut.200.$r --identity 70 --threads 2 "
+	echo "python $tool --input benchmark/$cut.1000.$r.fastq --db $db --output benchmark/mpf.$cut.1000.$r --identity 70 --threads 2"
+	echo "python $tool --input benchmark/$cut.5000.$r.fastq --db $db --output benchmark/mpf.$cut.5000.$r --identity 70 --threads 2"
     done
 done |parallel -j 64
 

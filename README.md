@@ -20,6 +20,7 @@
 - **R** with libraries:
   - `Biostrings`
   - `pwalign`
+  - `parallel`
 
 
 - **DIAMOND v2.0.15** (this exact version is required)
@@ -29,8 +30,9 @@
 R packages can be installed with:
 
 ```r
+install.packages("parallel")
 install.packages("BiocManager")
-BiocManager::install(c("msa", "Biostrings"))
+BiocManager::install(c("pwalign", "Biostrings"))
 ```
 
 DIAMOND v2.0.15 can be downloaded from:
@@ -51,7 +53,7 @@ cd metapointfinder
 ## Usage
 
 ```bash
-python metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder [--force]
+python metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder --identity 85 --threads 4 [--force]
 ```
 
 ### Arguments
@@ -59,6 +61,8 @@ python metapointfinder.py --input file.fastq[.gz] --db databasefolder --output o
 - `file.fastq` or `file.fastq.gz`: sequence read data file. Currently paired read data information is not used.
 - `databasefolder`: Directory where AMRFinder databases will be downloaded/prepared.
 - `output_folder`: Directory to store all results.
+- `--identity 85`: percentage identity cutoff. Results may vary with different cutoffs
+- `--threads 4` : parallel processing in diamond, kma and calling pwalign in parallel using mcapply in R
 - `--force`: write in same directory and overwrite results. Use with care. Never use in parallel with different input files.
 
 

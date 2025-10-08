@@ -3,7 +3,13 @@
 suppressPackageStartupMessages({
   library(Biostrings)
   library(pwalign)
+  library(parallel)
 })
+
+args <- commandArgs(trailingOnly = TRUE)
+input_file <- args[1]
+threads <- as.integer(args[2])
+
 
 # -------- Core scorer (protein) --------
 calculate_mutation_score <- function(reference, target, changes_str) {
@@ -225,13 +231,14 @@ process_mutation_data <- function(file_path) {
     stop(paste("Missing required columns:", paste(missing_cols, collapse = ", ")))
   }
 
-  results <- lapply(seq_len(nrow(input_data)), function(i) {
+#  results <- lapply(seq_len(nrow(input_data)), function(i) {
+  results <- mclapply(seq_len(nrow(input_data)), function(i) {
     calculate_mutation_score(
       reference   = input_data$reference[i],
       target      = input_data$target[i],
       changes_str = input_data$changes_str[i]
     )
-  })
+  }, mc.cores = threads)
 
   input_data$MutationScore         <- sapply(results, `[[`, "score")
   input_data$DetectedMutations     <- sapply(results, `[[`, "detected_mutations")
@@ -248,5 +255,5 @@ process_mutation_data <- function(file_path) {
 }
 
 # Example usage:
-result <- process_mutation_data("input.tsv")
+result <- process_mutation_data(input_file)
 print(result)

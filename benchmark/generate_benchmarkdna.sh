@@ -28,10 +28,10 @@ done |parallel -j 64 >/dev/null
 
 # run metapointfinder on all outputs. change the locations of the tool and the db to suit your needs
 for r in 0.00 0.01 0.02 0.03 0.05 0.1 0.2 0.3 ; do
-        echo "python $tool --input benchmarkdna/100.$r.fastq --db $db --output benchmarkdna/mpf.100.$r --identity 50"
-        echo "python $tool --input benchmarkdna/200.$r.fastq --db $db --output benchmarkdna/mpf.200.$r --identity 50"
-        echo "python $tool --input benchmarkdna/1000.$r.fastq --db $db --output benchmarkdna/mpf.1000.$r --identity 50"
-	echo "python $tool --input benchmarkdna/5000.$r.fastq --db $db --output benchmarkdna/mpf.5000.$r --identity 50"
+        echo "python $tool --input benchmarkdna/100.$r.fastq --db $db --output benchmarkdna/mpf.100.$r --identity 50 --threads 2"
+        echo "python $tool --input benchmarkdna/200.$r.fastq --db $db --output benchmarkdna/mpf.200.$r --identity 50 --threads 2"
+        echo "python $tool --input benchmarkdna/1000.$r.fastq --db $db --output benchmarkdna/mpf.1000.$r --identity 50 --threads 2"
+	echo "python $tool --input benchmarkdna/5000.$r.fastq --db $db --output benchmarkdna/mpf.5000.$r --identity 50 --threads 2"
 done |parallel -j 64
 
 # this thing checks if the information in the header is the same as the prediction. this counts unique hits. We only check WT reads and Wildtype prediction and RES reads and Resistance prediction. There will be many false negatives and unknowns as many of the shorter reads do not cover the resistance determining region, therefore these are not scored. False Positives can occur by chance in the reads with mutation.
