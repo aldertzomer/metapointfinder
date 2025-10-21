@@ -23,7 +23,7 @@
   - `parallel`
 
 
-- **DIAMOND v2.0.15** (this exact version is required)
+- **DIAMOND**
 - **KMA**
 - **wget**
 
@@ -35,8 +35,8 @@ install.packages("BiocManager")
 BiocManager::install(c("pwalign", "Biostrings"))
 ```
 
-DIAMOND v2.0.15 can be downloaded from:
-https://github.com/bbuchfink/diamond/releases/tag/v2.0.15
+DIAMOND can be downloaded from:
+https://github.com/bbuchfink/diamond/releases/
 
 KMA can be obtained from:
 https://bitbucket.org/genomicepidemiology/kma
@@ -152,7 +152,6 @@ Example (`*.prot.updated_table_with_scores_and_mutations.tsv`):
 
 ## Notes
 
-- Ensure **DIAMOND v2.0.15** is used. Other versions may not work as expected.
 - Databases are downloaded directly from NCBI during the first run.
 - Mutation detection relies on known mutations in the AMRFinder database. Novel mutations will not be scored.
 - For metagenomic samples with highly fragmented reads, alignment quality may affect detection sensitivity. 

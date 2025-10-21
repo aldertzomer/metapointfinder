@@ -570,7 +570,7 @@ def main():
     print("Aligning reads to proteins using diamond blastx")
     sh(
         f"diamond blastx --threads {threads} -d {database}/AMRProt -q {sample_fastq} "
-        f"-o {sample}.prot.hits.txt -F 15 --range-culling -k1 --range-cover 5 --iterate "
+        f"-o {sample}.prot.hits.txt -F 15 --range-culling -k1 --range-cover 5 "
         f"--id {identity} --masking 0 --outfmt 6 "
         f"qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore full_sseq qseq_translated "
         f"1>> {sample}.log 2>> {sample}.error"
