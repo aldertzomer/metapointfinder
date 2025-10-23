@@ -1,0 +1,88 @@
+2025-10-01 16:03:58 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt-mutation.tsv [185046/185046] -> "AMRProt-mutation.tsv" [1]
+2025-10-01 16:03:59 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMRProt.fa [4523235/4523235] -> "AMRProt.fa" [1]
+diamond v2.0.15.153 (C) Max Planck Society for the Advancement of Science
+Documentation, support and updates available at http://www.diamondsearch.org
+Please cite: http://dx.doi.org/10.1038/s41592-021-01101-x Nature Methods (2021)
+
+#CPU threads: 128
+Scoring parameters: (Matrix=BLOSUM62 Lambda=0.267 K=0.041 Penalties=11/1)
+Database input file: AMRProt_mutation.fa
+Opening the database file...  [0.004s]
+Loading sequences...  [0s]
+Masking sequences...  [0.014s]
+Writing sequences...  [0s]
+Hashing sequences...  [0s]
+Loading sequences...  [0s]
+Writing trailer...  [0s]
+Closing the input file...  [0s]
+Closing the database file...  [0.002s]
+
+Database sequences  260
+  Database letters  135256
+     Database hash  c0ea5a2bab747bee3100a72810f9afca
+        Total time  0.022000s
+2025-10-01 16:04:00 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Acinetobacter_baumannii.tsv [538/538] -> "AMR_DNA-Acinetobacter_baumannii.tsv" [1]
+2025-10-01 16:04:00 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Campylobacter.tsv [1670/1670] -> "AMR_DNA-Campylobacter.tsv" [1]
+2025-10-01 16:04:01 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Clostridioides_difficile.tsv [510/510] -> "AMR_DNA-Clostridioides_difficile.tsv" [1]
+2025-10-01 16:04:01 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecalis.tsv [446/446] -> "AMR_DNA-Enterococcus_faecalis.tsv" [1]
+2025-10-01 16:04:01 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecium.tsv [444/444] -> "AMR_DNA-Enterococcus_faecium.tsv" [1]
+2025-10-01 16:04:02 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Escherichia.tsv [8332/8332] -> "AMR_DNA-Escherichia.tsv" [1]
+2025-10-01 16:04:02 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_oxytoca.tsv [848/848] -> "AMR_DNA-Klebsiella_oxytoca.tsv" [1]
+2025-10-01 16:04:03 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_pneumoniae.tsv [355/355] -> "AMR_DNA-Klebsiella_pneumoniae.tsv" [1]
+2025-10-01 16:04:03 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Neisseria_gonorrhoeae.tsv [2339/2339] -> "AMR_DNA-Neisseria_gonorrhoeae.tsv" [1]
+2025-10-01 16:04:04 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Salmonella.tsv [462/462] -> "AMR_DNA-Salmonella.tsv" [1]
+2025-10-01 16:04:04 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Staphylococcus_aureus.tsv [1976/1976] -> "AMR_DNA-Staphylococcus_aureus.tsv" [1]
+2025-10-01 16:04:05 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Streptococcus_pneumoniae.tsv [914/914] -> "AMR_DNA-Streptococcus_pneumoniae.tsv" [1]
+2025-10-01 16:04:05 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Acinetobacter_baumannii.fa [303/303] -> "AMR_DNA-Acinetobacter_baumannii.fa" [1]
+2025-10-01 16:04:05 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Campylobacter.fa [6971/6971] -> "AMR_DNA-Campylobacter.fa" [1]
+2025-10-01 16:04:06 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Clostridioides_difficile.fa [3454/3454] -> "AMR_DNA-Clostridioides_difficile.fa" [1]
+2025-10-01 16:04:06 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecalis.fa [2984/2984] -> "AMR_DNA-Enterococcus_faecalis.fa" [1]
+2025-10-01 16:04:07 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Enterococcus_faecium.fa [2989/2989] -> "AMR_DNA-Enterococcus_faecium.fa" [1]
+2025-10-01 16:04:07 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Escherichia.fa [7791/7791] -> "AMR_DNA-Escherichia.fa" [1]
+2025-10-01 16:04:07 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_oxytoca.fa [166/166] -> "AMR_DNA-Klebsiella_oxytoca.fa" [1]
+2025-10-01 16:04:08 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Klebsiella_pneumoniae.fa [365/365] -> "AMR_DNA-Klebsiella_pneumoniae.fa" [1]
+2025-10-01 16:04:08 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Neisseria_gonorrhoeae.fa [6138/6138] -> "AMR_DNA-Neisseria_gonorrhoeae.fa" [1]
+2025-10-01 16:04:09 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Salmonella.fa [1612/1612] -> "AMR_DNA-Salmonella.fa" [1]
+2025-10-01 16:04:09 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Staphylococcus_aureus.fa [3414/3414] -> "AMR_DNA-Staphylococcus_aureus.fa" [1]
+2025-10-01 16:04:10 URL:https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/AMR_DNA-Streptococcus_pneumoniae.fa [2990/2990] -> "AMR_DNA-Streptococcus_pneumoniae.fa" [1]
+# Indexing databases.
+# Updating DBs
+# Reading inputfile: 	AMR_DNA_underscore.fa
+# Added:	NZ_CP049806.1@blaOXA-143_promoter_region@blaOXA-143:3403170-3403400
+# Added:	NC_002163.1@23S_ribosomal_RNA@23S:396449-399360
+# Added:	NC_022347.1@23S_ribosomal_RNA@23S:1040292-1037381
+# Added:	NZ_CP022079.1@blaOXA-61_promoter_region@blaOXA-61:267177-268072
+# Added:	NZ_CP019870.1@23S_ribosomal_RNA@23S:4042221-4045120
+# Added:	NZ_CP037853.1@nimB_promoter_region@nimB:2640793-2641193
+# Added:	NZ_CP041738.1@23S_ribosomal_RNA@23S:216195-219090
+# Added:	NZ_CP041261.2@23S_ribosomal_RNA@23S:423530-426430
+# Added:	NC_000913.3@16S_ribosomal_RNA@16S_rrsB:4166659-4168201
+# Added:	NC_000913.3@16S_ribosomal_RNA@16S_rrsC:3941808-3943350
+# Added:	NC_004431.1@23S_ribosomal_RNA@23S:237160-240064
+# Added:	NZ_CP041538.1@ampC_blaEC_promoter_region@ampC:1149245-1149489
+# Added:	NZ_CP095603.1@blaTEM_promoter_region@blaTEM:148777-149952
+# Added:	NZ_CP026715.1@blaOXY_promoter_region@blaOXY:3359801-3359903
+# Added:	NZ_CP054063.1@blaSHV_promoter_region@blaSHV:2645215-2645514
+# Added:	NC_002946.2@23S_ribosomal_RNA@23S:1119158-1116249
+# Added:	NZ_AP019853.2@16S_ribosomal_RNA@16S:1155759-1157299
+# Added:	NZ_AP023073.1@efflux_pump_MacAB_promoter_region@macAB:147313-147537
+# Added:	NZ_AP023073.1@sodium-coupled_multidrug_efflux_MATE_transporter_NorM_promoter_region@norM:1198657-1198990
+# Added:	NZ_CP012026.1@multidrug_efflux_RND_transporter_periplasmic_adaptor_subunit_MtrC_promoter_region@mtrC:1110850-1110550
+# Added:	NZ_CP043871.1@multidrug_efflux_system_transcriptional_repressor_MtrR_promoter_region@mtrR:1392766-1393015
+# Added:	NC_003197.2@16S_ribosomal_RNA@16S_rrsD:3570470-3572005
+# Added:	NZ_CP009828.1@23S_ribosomal_RNA@23S:497114-500039
+# Added:	NZ_RIXR01000001.1@D-alanyl-D-alanine_carboxypeptidase_PBP4_promoter_region@pbp4:740020-740320
+# Added:	NZ_CP018347.1@23S_ribosomal_RNA@23S:32347-35250
+# Templates key-value pairs:	27968.
+#
+# Total time used for DB indexing: 0.01 s.
+#
+# Compressing templates
+# Preparing compressed DB.
+# Calculating relative indexes.
+# Finalizing indexes.
+# Dumping compressed DB
+# Template database created.
+#
+# Total time used for DB compression: 0.02 s.
+#
