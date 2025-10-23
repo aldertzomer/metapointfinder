@@ -1,6 +1,10 @@
 # MetaPointFinder
 
-**MetaPointFinder** is a tool for detecting and scoring resistance-associated point mutations directly from long-read and short-read metagenomics sequencing data, using the AMRFinder database as reference. It combines protein- and DNA-level mutation detection to classify reads as wild-type (WT) or resistant (R), or as UNKNOWN, providing both read-level and summary-level output.
+[![Try it online](https://img.shields.io/badge/Try%20it%20online-klif.uu.nl%2Fmetapointfinder-blue?style=for-the-badge)](https://klif.uu.nl/metapointfinder)
+
+**MetaPointFinder** is a tool for detecting and scoring resistance-associated point mutations directly from long-read and short-read metagenomics sequencing data, using the AMRFinder database as reference.
+
+A user-friendly **web interface** is available at [klif.uu.nl/metapointfinder](https://klif.uu.nl/metapointfinder).
 
 ---
 
