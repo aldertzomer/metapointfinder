@@ -111,7 +111,7 @@ systems. The Docker container should work on any platform.
 ## Usage
 
 ```bash
-python metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder --identity 85 --threads 4 [--force]
+metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder --identity 85 --threads 4 [--force]
 ```
 
 When using the Docker container, you can use these commands to get started:
