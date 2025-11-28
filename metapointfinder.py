@@ -3,7 +3,7 @@
 
 """
 metapointfinder.py
-Reimplementation of the Bash metapointfinder pipeline in Python
+Reimplementation of the Bash MetaPointFinder pipeline in Python
 
 Usage:
   python metapointfinder.py --input <file.fastq[.gz]> --db <databasefolder> --output <outputfolder> --id 85 --threads 4 [--force]
@@ -11,7 +11,6 @@ Usage:
 Requirements:
   - Programs listed in ./dependencies (diamond, kma, wget, R)
   - R packages: Biostrings, pwalign, parallel
-  - DIAMOND 2.0.15
 
 This script expects to live next to:
   - dependencies
@@ -364,14 +363,11 @@ def write_class_and_gene_summaries(sample_prefix, out_dir: Path, is_prot=True):
 
 
 def main():
-    print("This is metapointfinder v0.3")
+    print("This is MetaPointFinder v1.01")
     print(
         "This tool finds substitions in translated reads matching to relevant proteins and mutations in reads matching to relevant genes"
     )
     print("Relevant proteins and genes are obtained from the AMRFinder database")
-    #
-    # CLI flags shim: support --input/--db/--output [--force] while preserving positional form
-    #
     import argparse
 
     parser = argparse.ArgumentParser(add_help=False)
@@ -381,8 +377,23 @@ def main():
     parser.add_argument("--identity", "-id")
     parser.add_argument("--threads", "-t")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--version", "-v", action="store_true")
+    parser.add_argument("--help", "-h", action="store_true")
     parser.add_argument("rest", nargs="*")
+
     args = parser.parse_args()
+
+    if args.help :
+        print(
+                "usage: metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder --identity 85 --threads 4 [--force]"
+            )
+        sys.exit(0)
+
+    if args.version :
+        print(
+                "MetaPointFinder v1.01"
+            )
+        sys.exit(0)
 
     if args.identity is None:
         args.identity = 85  # default identity threshold (1–100 scale)
@@ -402,13 +413,7 @@ def main():
             print(
                 "usage: metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder --identity 85 --threads 4 [--force]"
             )
-            #            print("   or: metapointfinder.py file.fastq[.gz] databasefolder outputfolder identity [force]")
             sys.exit(1)
-    #        input_path  = Path(args.rest[0]).resolve()
-    #        database    = Path(args.rest[1])
-    #        output      = Path(args.rest[2])
-    #        identity    = Path(args.rest[3])
-    #        force_flag  = "force" if (len(args.rest) > 3 and args.rest[3] == "force") else None
 
     script_path = Path(__file__).resolve()
     script_dir = script_path.parent
@@ -442,7 +447,7 @@ def main():
     if not input_path.exists():
         print(f"File {input_path} not found!")
         print(
-            "usage: metapointfinder.py file.fastq[.gz] databasefolder outputfolder [force]"
+            "usage: metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder --identity 85 --threads 4 [--force]"
         )
         sys.exit(1)
 
