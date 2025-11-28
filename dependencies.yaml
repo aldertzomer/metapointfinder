@@ -1,0 +1,12 @@
+name: metapointfinder
+
+channels:
+ - conda-forge
+ - bioconda
+
+dependencies:
+ - diamond=2.1.14
+ - bioconductor-pwalign=1.2.0
+ - bioconductor-biostrings=2.74.0
+ - wget=1.21.4
+ - kma=1.4.15

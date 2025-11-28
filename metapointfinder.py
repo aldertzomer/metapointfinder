@@ -41,9 +41,11 @@ def collect_all_classes(db_dir: Path):
             for ln in f:
                 if not ln.strip():
                     continue
-                parts = ln.rstrip("\n").split("\t")
-                if len(parts) >= 6 and parts[5] and parts[5] != "class":
-                    classes.add(parts[5])
+                else:
+                    parts = ln.rstrip("\n").split("\t")
+                    if len(parts) >= 6 and parts[5] and parts[5] != "class":
+                        classes.add(parts[5])
+
     # DNA mutation TSV: class typically at column 5
     dna_mut = Path(db_dir) / "AMR_DNA-mutation.tsv"
     if dna_mut.exists():
@@ -51,11 +53,12 @@ def collect_all_classes(db_dir: Path):
             for ln in f:
                 if not ln.strip():
                     continue
-                if "mutation_position" in ln or ("class" in ln and "position" in ln):
+                elif "mutation_position" in ln or ("class" in ln and "position" in ln):
                     continue
-                parts = ln.rstrip("\n").split("\t")
-                if len(parts) >= 5 and parts[4] and parts[4] != "class":
-                    classes.add(parts[4])
+                else:
+                    parts = ln.rstrip("\n").split("\t")
+                    if len(parts) >= 5 and parts[4] and parts[4] != "class":
+                        classes.add(parts[4])
     return classes
 
 
@@ -112,13 +115,14 @@ def fasta_to_tsv_two_cols(fa_in: Path, tsv_out: Path):
             line = line.rstrip("\n")
             if not line:
                 continue
-            if line.startswith(">"):
+            elif line.startswith(">"):
                 if acc is not None:
                     fout.write(f"{acc}\t{''.join(seq_parts)}\n")
                 acc = line[1:].split()[0]
                 seq_parts = []
             else:
                 seq_parts.append(line.strip())
+
         if acc is not None:
             fout.write(f"{acc}\t{''.join(seq_parts)}\n")
 
@@ -141,39 +145,46 @@ def parse_amrprot_mutation_underscore_combined(tsv_in):
         for line in f:
             if not line.strip():
                 continue
-            parts = line.rstrip("\n").split("\t")
             # Expect the original columns; we mimic cut -f 2,3,4,6 path
             # Guard against header
-            if "class" in line and "mutation" in line:
+            elif "class" in line and "mutation" in line:
                 continue
-            if len(parts) < 6:
-                # Best effort fallback when columns not in expected width
-                continue
-            accession = parts[1]
-            position = parts[2]
-            mutation_original = parts[3]
-            amr_class = parts[5]
-
-            # Keep raw token; don't map del/STOP yet
-            if "_" in mutation_original:
-                mutation_cleaned = mutation_original.split("_", 1)[1]
             else:
-                mutation_cleaned = mutation_original
+                parts = line.rstrip("\n").split("\t")
 
-            mpos = re.search(r"[0-9]+", position)
-            if not mpos:
-                continue
-            pos_int = int(mpos.group(0))
+                if len(parts) < 6:
+                    # Best effort fallback when columns not in expected width
+                    continue
+                else:
+                    accession = parts[1]
+                    position = parts[2]
+                    mutation_original = parts[3]
+                    amr_class = parts[5]
 
-            # Split around the digits; keep any '-' in baseright
-            pieces = re.split(r"([0-9]+)", mutation_cleaned, maxsplit=1)
-            if len(pieces) < 3:
-                continue
-            baseleft = pieces[0]
-            baseright = pieces[2]
+                    # Keep raw token; don't map del/STOP yet
+                    if "_" in mutation_original:
+                        mutation_cleaned = mutation_original.split("_", 1)[1]
+                    else:
+                        mutation_cleaned = mutation_original
 
-            mutation_raw = f"{baseleft}{pos_int}{baseright}"
-            tmp.setdefault((amr_class, accession), []).append((pos_int, mutation_raw))
+                    mpos = re.search(r"[0-9]+", position)
+                    if not mpos:
+                        continue
+                    else:
+                        pos_int = int(mpos.group(0))
+
+                    # Split around the digits; keep any '-' in baseright
+                    pieces = re.split(r"([0-9]+)", mutation_cleaned, maxsplit=1)
+                    if len(pieces) < 3:
+                        continue
+                    else:
+                        baseleft = pieces[0]
+                        baseright = pieces[2]
+
+                        mutation_raw = f"{baseleft}{pos_int}{baseright}"
+                        tmp.setdefault((amr_class, accession), []).append(
+                            (pos_int, mutation_raw)
+                        )
 
     combined = {}
     for key, items in tmp.items():
@@ -220,27 +231,31 @@ def build_AMR_DNA_combined(db_dir):
         for line in f:
             if not line.strip():
                 continue
-            if "mutation_position" in line or ("class" in line and "position" in line):
+            elif "mutation_position" in line or (
+                "class" in line and "position" in line
+            ):
                 continue
-            parts = line.rstrip("\n").split("\t")
-            if len(parts) < 5:
-                continue
-            acc = parts[0]
-            pos_str = parts[1]
-            mut = parts[2]
-            cls = parts[4]
-
-            # ALWAYS prefer the override column (position in provided sequence)
-            pos_used = None
-            if len(parts) > 3 and parts[3].strip().isdigit():
-                pos_used = int(parts[3].strip())
             else:
-                mpos = re.search(r"[0-9]+", pos_str)
-                if not mpos:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) < 5:
                     continue
-                pos_used = int(mpos.group(0))
+                else:
+                    acc = parts[0]
+                    pos_str = parts[1]
+                    mut = parts[2]
+                    cls = parts[4]
 
-            rows.append((acc, pos_used, mut, cls))
+                    # ALWAYS prefer the override column (position in provided sequence)
+                    pos_used = None
+                    if len(parts) > 3 and parts[3].strip().isdigit():
+                        pos_used = int(parts[3].strip())
+                    else:
+                        mpos = re.search(r"[0-9]+", pos_str)
+                        if not mpos:
+                            continue
+                        pos_used = int(mpos.group(0))
+
+                    rows.append((acc, pos_used, mut, cls))
 
     classes = sorted(set(r[3] for r in rows))
     accessions = sorted(set(r[0] for r in rows))
@@ -253,18 +268,20 @@ def build_AMR_DNA_combined(db_dir):
                 if acc_i != acc or cls_i != cls:
                     continue
 
-                mutation_cleaned = mut.split("_", 1)[1] if "_" in mut else mut
+                else:
+                    mutation_cleaned = mut.split("_", 1)[1] if "_" in mut else mut
 
-                # Split token and strip trailing '-' from left part (promoter negative marker),
-                # but keep '-' on the right (true deletion marker).
-                pieces = re.split(r"([0-9]+)", mutation_cleaned, maxsplit=1)
-                if len(pieces) < 3:
-                    continue
-                baseleft = pieces[0].rstrip("-")
-                baseright = pieces[2]
+                    # Split token and strip trailing '-' from left part (promoter negative marker),
+                    # but keep '-' on the right (true deletion marker).
+                    pieces = re.split(r"([0-9]+)", mutation_cleaned, maxsplit=1)
+                    if len(pieces) < 3:
+                        continue
+                    else:
+                        baseleft = pieces[0].rstrip("-")
+                        baseright = pieces[2]
 
-                mutation_raw = f"{baseleft}{pos_used}{baseright}"
-                muts.append((pos_used, mutation_raw))
+                        mutation_raw = f"{baseleft}{pos_used}{baseright}"
+                        muts.append((pos_used, mutation_raw))
 
             if muts:
                 muts.sort(key=lambda x: x[0])
@@ -272,6 +289,8 @@ def build_AMR_DNA_combined(db_dir):
                 changes_str = changes_str.replace("del", "-").replace("STOP", "-")
                 seq = acc_to_seq.get(acc, "")
                 by_cls_acc[(cls, acc)] = (seq, changes_str)
+            else:
+                continue
 
     # Write sorted by (class, accession)
     with open(combined_out, "w", encoding="utf-8") as out:
@@ -383,16 +402,14 @@ def main():
 
     args = parser.parse_args()
 
-    if args.help :
+    if args.help:
         print(
-                "usage: metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder --identity 85 --threads 4 [--force]"
-            )
+            "usage: metapointfinder.py --input file.fastq[.gz] --db databasefolder --output outputfolder --identity 85 --threads 4 [--force]"
+        )
         sys.exit(0)
 
-    if args.version :
-        print(
-                "MetaPointFinder v1.01"
-            )
+    if args.version:
+        print("MetaPointFinder v1.01")
         sys.exit(0)
 
     if args.identity is None:
@@ -423,16 +440,14 @@ def main():
     # Dependencies (from ./dependencies)
     # ------------------------
     deps_file = script_dir / "dependencies"
-    if not deps_file.exists():
-        print("Missing 'dependencies' file next to the script.")
-        sys.exit(1)
+    assert deps_file.exists(), "Missing 'dependencies' file next to the script."
 
     # Check each dependency
     with open(deps_file, "r", encoding="utf-8") as f:
         for program in [ln.strip() for ln in f if ln.strip()]:
-            if shutil.which(program) is None:
-                print(f"Required dependency {program} not installed")
-                sys.exit(1)
+            assert (
+                shutil.which(program) != None
+            ), f"Required dependency {program} not installed"
 
     # R packages
     try:
@@ -453,14 +468,14 @@ def main():
 
     # Database folder
     if database.exists():
-        print("Database folder already exists")
+        print(f"Database folder found, using '{database}'")
         database = database.resolve()
     else:
         ensure_dir(database)
         database = database.resolve()
-    if not database.exists():
-        print("Error: database folder not existing or not created. Try again - exiting")
-        sys.exit(1)
+    assert (
+        database.exists()
+    ), "Error: database folder not existing or not created. Try again - exiting"
 
     # Output folder (respect 'force')
     if output.exists():
@@ -472,9 +487,9 @@ def main():
     else:
         ensure_dir(output)
         output = output.resolve()
-    if not output.exists():
-        print("Error: output folder not existing or not created. Try again - exiting")
-        sys.exit(1)
+    assert (
+        output.exists()
+    ), "Error: output folder not existing or not created. Try again - exiting"
 
     # Unzip/prepare sample FASTQ in output
     if fastqfile.endswith(".gz"):
