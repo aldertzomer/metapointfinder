@@ -21,7 +21,7 @@ A user-friendly **web interface** is available at [klif.uu.nl/metapointfinder](h
 
 ## Installation
 
-### Conda/mamba : Not approved yet. Please use docker or the github installation using the yaml file (see below). 
+### Conda/mamba
 
 The simplest installation methods are Mamba and Docker. These are therefore
 recommended. Both methods include MetaPointFinder itself along with all its
