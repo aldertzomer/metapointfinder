@@ -33,7 +33,13 @@ To install Mamba, see
 To install MetaPointFinder using mamba, type:
 
 ```bash
-mamba env create -n metapointfinder-test metapointfinder -c conda-forge -c bioconda
+mamba create -n metapointfinder -c conda-forge -c bioconda metapointfinder
+```
+
+or with conda
+
+```bash
+conda create -n metapointfinder -c conda-forge -c bioconda metapointfinder
 ```
 
 ### Docker
