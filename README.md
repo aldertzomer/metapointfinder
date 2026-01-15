@@ -33,7 +33,7 @@ To install Mamba, see
 To install MetaPointFinder using mamba, type:
 
 ```bash
-mamba env create -n metapointfinder metapointfinder=1.01 -c bioconda
+mamba env create -n metapointfinder metapointfinder=1.01
 ```
 
 ### Docker
