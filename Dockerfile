@@ -12,7 +12,7 @@ RUN apk add --update R R-dev wget curl alpine-sdk libc6-compat gcompat
 
 RUN R -e "install.packages('parallel',repos = 'http://cran.us.r-project.org')"
 RUN R -e "install.packages('BiocManager',repos = 'http://cran.us.r-project.org')"
-RUN R -e "BiocManager::install(version='3.22')"
+RUN R -e "BiocManager::install(version='3.23')"
 RUN R -e "BiocManager::install(c('pwalign', 'Biostrings'))"
 
 LABEL version="0.3"
