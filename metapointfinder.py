@@ -101,6 +101,31 @@ def which_or_die(prog):
         sys.exit(1)
 
 
+def pick_fields_from_hit(line: str):
+    """Parse the DIAMOND fields used for protein mutation scoring.
+
+    AMRFinderPlus historically prefixed protein FASTA identifiers with ``0|``.
+    Newer databases omit that field.  Normalizing only ``sseqid`` here keeps
+    both formats compatible and avoids shifting the independent DIAMOND
+    ``full_sseq`` and ``qseq_translated`` columns.
+    """
+    cols = line.rstrip("\n").split("\t")
+    if len(cols) < 14:
+        cols += [""] * (14 - len(cols))
+
+    _id = cols[0]
+    header_fields = cols[1].split("|") if cols[1] else []
+
+    if header_fields and header_fields[0] == "0":
+        header_fields = header_fields[1:]
+
+    _accession = header_fields[0] if header_fields else ""
+    _gene = header_fields[-1] if header_fields else ""
+    _reference = cols[12]
+    _target = cols[13]
+    return _id, _accession, _gene, _reference, _target
+
+
 def fasta_to_tsv_two_cols(fa_in: Path, tsv_out: Path):
     """
     Convert FASTA into two-column TSV: accession<TAB>sequence
@@ -690,20 +715,6 @@ def main():
             if len(parts) >= 3:
                 cls, acc, chg = parts[0], parts[1], parts[2]
                 amr_map.setdefault(acc, []).append((cls, chg))
-
-    def pick_fields_from_hit(line: str):
-        # Get the right columns
-        cols = line.rstrip("\n").split("\t")
-        tmp = [(cols[i] if i < len(cols) else "") for i in (0, 1, 12, 13)]
-        expanded = "\t".join(tmp).replace("|", "\t").split("\t")
-        if len(expanded) < 14:
-            expanded += [""] * (14 - len(expanded))
-        _id = expanded[0]
-        _accession = expanded[2]
-        _gene = expanded[11]
-        _reference = expanded[12]
-        _target = expanded[13]
-        return _id, _accession, _gene, _reference, _target
 
     with open(f"{sample}.prot.hits.txt", encoding="utf-8") as fh, open(
         out_path, "a", encoding="utf-8"
