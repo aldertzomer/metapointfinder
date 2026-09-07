@@ -12,8 +12,8 @@ RUN apk add --update R R-dev wget curl alpine-sdk libc6-compat gcompat
 
 RUN R -e "install.packages('parallel',repos = 'http://cran.us.r-project.org')"
 RUN R -e "install.packages('BiocManager',repos = 'http://cran.us.r-project.org')"
-RUN R -e "BiocManager::install(version='3.22')"
-RUN R -e "BiocManager::install(c('pwalign', 'Biostrings'))"
+# Use the Bioconductor release compatible with R, requiring at least 3.22.
+RUN R -e "if (BiocManager::version() < numeric_version('3.22')) stop('Bioconductor >= 3.22 is required; upgrade R'); BiocManager::install(c('pwalign', 'Biostrings'), ask=FALSE)"
 
 LABEL version="0.3"
 LABEL maintainer="Cailean Carter"
